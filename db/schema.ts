@@ -67,6 +67,7 @@ export const characters = sqliteTable("characters", {
   name: text("name").notNull(),
   summary: text("summary").notNull().default(""),
   description: text("description").notNull().default(""),
+  storyYear: integer("story_year").notNull().default(2011),
   imageDataUrl: text("image_data_url"),
   ownerKeyHash: text("owner_key_hash").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),

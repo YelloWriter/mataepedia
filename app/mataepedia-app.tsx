@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, FormEvent, PointerEvent as ReactPointerEvent, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 type PageKey = "home" | "timeline" | "records" | "people" | "island" | "rumors" | "chat";
 type Room = {
@@ -31,6 +31,7 @@ type Character = {
   name: string;
   summary: string;
   description: string;
+  storyYear: number;
   imageDataUrl?: string | null;
   sortOrder?: number;
 };
@@ -56,6 +57,234 @@ const pages: { key: PageKey; label: string; code: string }[] = [
 
 const kindLabels = { diary: "일기", memo: "메모", guestbook: "방명록", rumor: "소문" } as const;
 const storyYears = [2011, 2012, 2013, 2014, 2015] as const;
+const characterYears = [2011, 2015] as const;
+const schoolYears: Record<number, string> = {
+  2011: "초등학교 3학년",
+  2012: "초등학교 4학년",
+  2013: "초등학교 5학년",
+  2014: "초등학교 6학년",
+  2015: "중학교 1학년",
+};
+
+type ConfirmRequest = { message: string; resolve: (confirmed: boolean) => void };
+const ConfirmContext = createContext<((message: string) => Promise<boolean>) | null>(null);
+
+function ConfirmProvider({ children }: { children: ReactNode }) {
+  const [request, setRequest] = useState<ConfirmRequest | null>(null);
+  const confirm = useCallback((message: string) => new Promise<boolean>((resolve) => setRequest({ message, resolve })), []);
+
+  const finish = useCallback((confirmed: boolean) => {
+    setRequest((current) => {
+      current?.resolve(confirmed);
+      return null;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!request) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") finish(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [finish, request]);
+
+  return <ConfirmContext.Provider value={confirm}>
+    {children}
+    {request && <div className="modal-backdrop confirm-backdrop" role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) finish(false); }}>
+      <section className="modal confirm-modal" role="alertdialog" aria-modal="true" aria-label="확인">
+        <p className="eyebrow">MATAEPEDIA / CONFIRM</p>
+        <h2>확인</h2>
+        <p>{request.message}</p>
+        <div className="form-actions"><button type="button" onClick={() => finish(false)}>취소</button><button type="button" onClick={() => finish(true)}>확인</button></div>
+      </section>
+    </div>}
+  </ConfirmContext.Provider>;
+}
+
+function useSiteConfirm() {
+  const confirm = useContext(ConfirmContext);
+  if (!confirm) throw new Error("ConfirmProvider가 필요합니다.");
+  return confirm;
+}
+
+function RetroSoundControls() {
+  const [enabled, setEnabled] = useState(true);
+  const [volume, setVolume] = useState(0.28);
+  const audioContext = useRef<AudioContext | null>(null);
+  const preferencesLoaded = useRef(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const savedEnabled = window.localStorage.getItem("mataepedia-sfx-enabled");
+      const savedVolume = Number(window.localStorage.getItem("mataepedia-sfx-volume"));
+      preferencesLoaded.current = true;
+      if (savedEnabled !== null) setEnabled(savedEnabled === "true");
+      if (Number.isFinite(savedVolume) && savedVolume >= 0 && savedVolume <= 1) setVolume(savedVolume);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!preferencesLoaded.current) return;
+    window.localStorage.setItem("mataepedia-sfx-enabled", String(enabled));
+    window.localStorage.setItem("mataepedia-sfx-volume", String(volume));
+  }, [enabled, volume]);
+
+  const playClick = useCallback(() => {
+    if (!enabled || volume <= 0) return;
+    const Context = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Context) return;
+    const context = audioContext.current ?? new Context();
+    audioContext.current = context;
+    if (context.state === "suspended") void context.resume();
+    const duration = 0.026;
+    const buffer = context.createBuffer(1, Math.ceil(context.sampleRate * duration), context.sampleRate);
+    const samples = buffer.getChannelData(0);
+    for (let index = 0; index < samples.length; index += 1) {
+      const decay = 1 - index / samples.length;
+      samples[index] = (Math.random() * 2 - 1) * decay;
+    }
+    const source = context.createBufferSource();
+    const filter = context.createBiquadFilter();
+    const gain = context.createGain();
+    filter.type = "bandpass";
+    filter.frequency.value = 1350;
+    filter.Q.value = 0.7;
+    gain.gain.value = Math.max(0.002, volume * 0.085);
+    source.buffer = buffer;
+    source.connect(filter).connect(gain).connect(context.destination);
+    source.start();
+  }, [enabled, volume]);
+
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target.closest("button, a, select, input[type='range'], input[type='file'], .upload-photo, .image-drop-field") : null;
+      if (target) playClick();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [playClick]);
+
+  return <div className="sound-controls" aria-label="효과음 설정">
+    <button type="button" aria-pressed={enabled} onClick={() => setEnabled((current) => !current)}>SFX {enabled ? "ON" : "OFF"}</button>
+    <label><span>VOL {Math.round(volume * 100).toString().padStart(2, "0")}</span><input type="range" min="0" max="1" step="0.05" value={volume} onChange={(event) => setVolume(Number(event.target.value))} aria-label="효과음 볼륨" disabled={!enabled} /></label>
+  </div>;
+}
+
+function ImageUploadField({ imageDataUrl, name, index, onFile, busy = false, mode = "card" }: { imageDataUrl?: string | null; name: string; index: number; onFile: (file: File) => void; busy?: boolean; mode?: "card" | "form" }) {
+  const [dragging, setDragging] = useState(false);
+  const className = mode === "card" ? `character-photo upload-photo ${busy ? "busy" : ""} ${dragging ? "dragging" : ""}` : `image-drop-field ${dragging ? "dragging" : ""}`;
+
+  function pick(file?: File) {
+    if (file) onFile(file);
+    setDragging(false);
+  }
+
+  return <label className={className} title="클릭하거나 이미지를 끌어다 놓기" onDragEnter={(event) => { event.preventDefault(); setDragging(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }} onDrop={(event) => { event.preventDefault(); pick(event.dataTransfer.files?.[0]); }}>
+    {imageDataUrl ? <img src={imageDataUrl} alt={`${name || "새 인물"} 인물 이미지`} loading="lazy" decoding="async" /> : <span>{mode === "card" ? <>CLICK OR DROP TO UPLOAD<br />{String(index + 1).padStart(3, "0")}</> : <>이미지를 클릭하거나<br />여기에 끌어다 놓기</>}</span>}
+    <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { pick(event.target.files?.[0]); event.currentTarget.value = ""; }} disabled={busy} />
+  </label>;
+}
+
+function ImageCropEditor({ file, onCancel, onApply }: { file: File; onCancel: () => void; onApply: (imageDataUrl: string) => void | Promise<void> }) {
+  const size = 360;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
+  const dragRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
+  const [ready, setReady] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const clampOffset = useCallback((next: { x: number; y: number }, nextZoom = zoom) => {
+    const image = imageRef.current;
+    if (!image) return next;
+    const baseScale = Math.max(size / image.naturalWidth, size / image.naturalHeight);
+    const width = image.naturalWidth * baseScale * nextZoom;
+    const height = image.naturalHeight * baseScale * nextZoom;
+    return {
+      x: Math.max(-(width - size) / 2, Math.min((width - size) / 2, next.x)),
+      y: Math.max(-(height - size) / 2, Math.min((height - size) / 2, next.y)),
+    };
+  }, [zoom]);
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    const image = imageRef.current;
+    if (!canvas || !image) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const baseScale = Math.max(size / image.naturalWidth, size / image.naturalHeight);
+    const width = image.naturalWidth * baseScale * zoom;
+    const height = image.naturalHeight * baseScale * zoom;
+    context.clearRect(0, 0, size, size);
+    context.drawImage(image, (size - width) / 2 + offset.x, (size - height) / 2 + offset.y, width, height);
+  }, [offset, zoom]);
+
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      imageRef.current = image;
+      setZoom(1);
+      setOffset({ x: 0, y: 0 });
+      setReady(true);
+    };
+    image.onerror = () => setError("이미지를 읽지 못했습니다.");
+    image.src = url;
+    return () => {
+      imageRef.current = null;
+      URL.revokeObjectURL(url);
+    };
+  }, [file]);
+
+  useEffect(() => { if (ready) draw(); }, [draw, ready]);
+
+  function pointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = { x: event.clientX, y: event.clientY, offsetX: offset.x, offsetY: offset.y };
+  }
+
+  function pointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const ratio = size / bounds.width;
+    setOffset(clampOffset({ x: drag.offsetX + (event.clientX - drag.x) * ratio, y: drag.offsetY + (event.clientY - drag.y) * ratio }));
+  }
+
+  async function apply() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    setSaving(true);
+    setError("");
+    try {
+      let imageDataUrl = canvas.toDataURL("image/webp", 0.78);
+      if (imageDataUrl.length > 240_000) imageDataUrl = canvas.toDataURL("image/webp", 0.62);
+      if (imageDataUrl.length > 240_000) imageDataUrl = canvas.toDataURL("image/webp", 0.48);
+      if (imageDataUrl.length > 240_000) throw new Error("이미지 용량이 너무 커. 크롭 범위를 바꿔 다시 시도해 줘.");
+      await onApply(imageDataUrl);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "이미지를 처리하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <div className="modal-backdrop crop-backdrop" role="presentation">
+    <section className="modal crop-modal" role="dialog" aria-modal="true" aria-label="인물 이미지 편집">
+      <p className="eyebrow">IMAGE EDITOR / CROP</p>
+      <h2>이미지 위치와 크기 맞추기</h2>
+      <div className="crop-stage"><canvas ref={canvasRef} width={size} height={size} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={() => { dragRef.current = null; }} onPointerCancel={() => { dragRef.current = null; }} aria-label="드래그해서 이미지 위치 이동" /></div>
+      <label className="zoom-control"><span>축소</span><input type="range" min="1" max="3" step="0.05" value={zoom} onChange={(event) => { const nextZoom = Number(event.target.value); setZoom(nextZoom); setOffset((current) => clampOffset(current, nextZoom)); }} aria-label="이미지 확대 축소" /><span>확대</span></label>
+      <p className="crop-help">이미지를 드래그해 위치를 옮기고, 막대로 크기를 조절해.</p>
+      {error && <p className="form-error standalone">{error}</p>}
+      <div className="form-actions"><button type="button" onClick={onCancel} disabled={saving}>취소</button><button type="button" onClick={apply} disabled={!ready || saving}>{saving ? "저장 중" : "이대로 사용"}</button></div>
+    </section>
+  </div>;
+}
 
 function localOwnerKey() {
   const storageKey = "mataepedia-owner-key";
@@ -130,15 +359,18 @@ export function MataepediaApp() {
   };
 
   return (
-    <div className="site-shell">
+    <ConfirmProvider><div className="site-shell">
       <header className="topbar">
         <button className="wordmark" onClick={() => go("home")} aria-label="마태피아 대문으로">
           <span>MATAEPEDIA</span>
           <small>마태피아 // MATAEDO PRIVATE ARCHIVE</small>
         </button>
-        <div className="system-note">
-          <span className="status-dot" /> SYSTEM ONLINE
-          <br />EST. 2011 / TEACHERS KEEP OUT
+        <div className="topbar-tools">
+          <RetroSoundControls />
+          <div className="system-note">
+            <span className="status-dot" /> SYSTEM ONLINE <span className="terminal-cursor" aria-hidden="true">█</span>
+            <br />EST. 2011 / TEACHERS KEEP OUT
+          </div>
         </div>
       </header>
 
@@ -159,7 +391,7 @@ export function MataepediaApp() {
           <div className="sidebar-warning">※ 이곳은 마태도 아이들이 만든 비공식 기록 보관소입니다.</div>
         </aside>
 
-        <main className="content" id="main-content">
+        <main className="content" id="main-content" key={page}>
           {notice && <div className="notice-line">{notice}</div>}
           {loading ? <div className="terminal-loading">자료 불러오는 중<span>_</span></div> : null}
           {!loading && page === "home" && <HomePage go={go} rooms={rooms} records={records} onSaved={refresh} />}
@@ -176,7 +408,7 @@ export function MataepediaApp() {
         <span>MATAEPEDIA BUILD 0.2</span>
         <span>TEXT FIRST / LOW BANDWIDTH MODE</span>
       </footer>
-    </div>
+    </div></ConfirmProvider>
   );
 }
 
@@ -243,6 +475,7 @@ function HomePage({ go, rooms, records, onSaved }: { go: (page: PageKey) => void
 }
 
 function TimelinePage({ events, onSaved }: { events: TimelineEvent[]; onSaved: () => Promise<void> }) {
+  const confirmDelete = useSiteConfirm();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<TimelineEvent | null>(null);
   const [error, setError] = useState("");
@@ -278,7 +511,7 @@ function TimelinePage({ events, onSaved }: { events: TimelineEvent[]; onSaved: (
   }
 
   async function remove(item: TimelineEvent) {
-    if (!window.confirm(`‘${item.title}’ 사건과 댓글을 삭제할까?`)) return;
+    if (!(await confirmDelete(`‘${item.title}’ 사건과 댓글을 삭제할까?`))) return;
     try {
       await apiPost({ action: "delete-event", id: item.id, ownerKey: localOwnerKey() });
       await onSaved();
@@ -302,7 +535,7 @@ function TimelinePage({ events, onSaved }: { events: TimelineEvent[]; onSaved: (
       {!showForm && error && <p className="form-error standalone">{error}</p>}
       <div className="timeline">
         {grouped.map((group) => <section key={group.year} className="year-block">
-          <div className="year-marker"><strong>{group.year}</strong><span>{group.events.length.toString().padStart(2, "0")} ENTRIES</span></div>
+          <div className="year-marker"><strong>{group.year}</strong><span>{schoolYears[group.year]}</span></div>
           <div className="year-events">{group.events.length ? group.events.map((item) => <article key={item.id} className="timeline-entry">
             <h2>{item.title}</h2><p>{item.body}</p><small>기록: {item.authorName}</small>
             <div className="entry-actions"><button onClick={() => openEditor(item)}>수정</button><button onClick={() => remove(item)}>삭제</button></div>
@@ -315,6 +548,7 @@ function TimelinePage({ events, onSaved }: { events: TimelineEvent[]; onSaved: (
 }
 
 function RecordsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () => Promise<void> }) {
+  const confirmDelete = useSiteConfirm();
   const [filter, setFilter] = useState<"diary" | "memo">("diary");
   const [selected, setSelected] = useState<RecordItem | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -334,7 +568,7 @@ function RecordsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () 
   }
 
   async function remove(item: RecordItem) {
-    if (!window.confirm(`‘${item.title}’ 기록과 댓글을 삭제할까?`)) return;
+    if (!(await confirmDelete(`‘${item.title}’ 기록과 댓글을 삭제할까?`))) return;
     setError("");
     try {
       await apiPost({ action: "delete-record", id: item.id, ownerKey: localOwnerKey() });
@@ -442,6 +676,7 @@ function CommentBranch({ comment, comments, depth, onReply, onChanged, onError }
 }
 
 function CommentItem({ comment, onReply, onChanged, onError }: { comment: Comment; onReply: () => void; onChanged: () => Promise<void>; onError: (message: string) => void }) {
+  const confirmDelete = useSiteConfirm();
   const [editing, setEditing] = useState(false);
 
   async function update(event: FormEvent<HTMLFormElement>) {
@@ -455,7 +690,7 @@ function CommentItem({ comment, onReply, onChanged, onError }: { comment: Commen
   }
 
   async function remove() {
-    if (!window.confirm("이 댓글과 아래 답글을 삭제할까?")) return;
+    if (!(await confirmDelete("이 댓글과 아래 답글을 삭제할까?"))) return;
     try {
       await apiPost({ action: "delete-comment", id: comment.id, ownerKey: localOwnerKey() });
       await onChanged();
@@ -474,14 +709,24 @@ function CommentItem({ comment, onReply, onChanged, onError }: { comment: Commen
 function PeoplePage({ characters, onSaved }: { characters: Character[]; onSaved: () => Promise<void> }) {
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState("");
+  const [draftImage, setDraftImage] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+
+  function chooseImage(file: File) {
+    if (!file.type.startsWith("image/")) { setError("이미지 파일만 올릴 수 있어."); return; }
+    if (file.size > 20 * 1024 * 1024) { setError("원본 이미지가 너무 커. 20MB보다 작은 파일을 골라 줘."); return; }
+    setError("");
+    setCropFile(file);
+  }
 
   async function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     try {
-      await apiPost({ action: "save-character", id: `person-${crypto.randomUUID()}`, name: form.get("name"), summary: form.get("summary"), description: form.get("description"), imageDataUrl: null, sortOrder: characters.length, ownerKey: localOwnerKey() });
+      await apiPost({ action: "save-character", id: `person-${crypto.randomUUID()}`, name: form.get("name"), summary: form.get("summary"), description: form.get("description"), storyYear: Number(form.get("year")), imageDataUrl: draftImage, sortOrder: characters.length, ownerKey: localOwnerKey() });
       formElement.reset();
+      setDraftImage(null);
       setShowAdd(false);
       await onSaved();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "인물을 추가하지 못했습니다."); }
@@ -492,19 +737,30 @@ function PeoplePage({ characters, onSaved }: { characters: Character[]; onSaved:
     <div className="toolbar"><button className="text-button" onClick={() => setShowAdd((value) => !value)}>[ {showAdd ? "닫기" : "+ 인물 추가"} ]</button></div>
     {showAdd && <form className="editor-box character-add-form" onSubmit={add}>
       <label>이름<input name="name" maxLength={40} required /></label>
-      <label>한 줄 설명<input name="summary" maxLength={120} /></label>
+      <label>한 마디<input name="summary" maxLength={120} /></label>
+      <label>극중 연도<select name="year" defaultValue="2011">{characterYears.map((year) => <option key={year}>{year}</option>)}</select></label>
+      <div className="character-image-field wide"><span>인물 이미지</span><ImageUploadField imageDataUrl={draftImage} name="새 인물" index={characters.length} onFile={chooseImage} mode="form" /><small>클릭하거나 드래그앤드롭한 뒤 확대·축소하고 크롭할 수 있어.</small></div>
       <label className="wide">인물 설명<textarea name="description" maxLength={6000} required /></label>
       {error && <p className="form-error">{error}</p>}
       <div className="form-actions"><button type="button" onClick={() => setShowAdd(false)}>취소</button><button type="submit">인물 추가</button></div>
     </form>}
-    <div className="character-grid">{characters.length ? characters.map((person, index) => <CharacterCard key={person.id} person={person} index={index} onSaved={onSaved} />) : <div className="empty-box">아직 등록된 인물이 없어.</div>}</div>
+    <div className="character-years">{characterYears.map((year) => {
+      const yearCharacters = characters.filter((person) => (person.storyYear || 2011) === year);
+      return <section className="character-year-section" key={year}>
+        <header className="character-year-heading"><p className="eyebrow">PERSON ARCHIVE / {year}</p><h2>{year}년</h2></header>
+        <div className="character-grid">{yearCharacters.length ? yearCharacters.map((person) => <CharacterCard key={person.id} person={person} index={characters.findIndex((item) => item.id === person.id)} onSaved={onSaved} />) : <div className="empty-box">{year}년에 등록된 인물이 없어.</div>}</div>
+      </section>;
+    })}</div>
+    {cropFile && <ImageCropEditor file={cropFile} onCancel={() => setCropFile(null)} onApply={(imageDataUrl) => { setDraftImage(imageDataUrl); setCropFile(null); }} />}
   </>;
 }
 
 function CharacterCard({ person, index, onSaved }: { person: Character; index: number; onSaved: () => Promise<void> }) {
+  const confirmDelete = useSiteConfirm();
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [cropFile, setCropFile] = useState<File | null>(null);
 
   async function save(values: Partial<Character>) {
     setBusy(true); setError("");
@@ -515,6 +771,7 @@ function CharacterCard({ person, index, onSaved }: { person: Character; index: n
         name: values.name ?? person.name,
         summary: values.summary ?? person.summary,
         description: values.description ?? person.description,
+        storyYear: values.storyYear ?? person.storyYear ?? 2011,
         imageDataUrl: values.imageDataUrl ?? null,
         sortOrder: person.sortOrder ?? index,
         ownerKey: localOwnerKey(),
@@ -529,37 +786,22 @@ function CharacterCard({ person, index, onSaved }: { person: Character; index: n
     }
   }
 
-  async function upload(file: File | undefined) {
-    if (!file) return;
+  function chooseImage(file: File) {
     if (!file.type.startsWith("image/")) { setError("이미지 파일만 올릴 수 있어."); return; }
-    try {
-      const bitmap = await createImageBitmap(file);
-      const canvas = document.createElement("canvas");
-      canvas.width = 300; canvas.height = 300;
-      const context = canvas.getContext("2d");
-      if (!context) throw new Error("이미지를 처리하지 못했습니다.");
-      const scale = Math.min(300 / bitmap.width, 300 / bitmap.height);
-      const width = Math.round(bitmap.width * scale); const height = Math.round(bitmap.height * scale);
-      context.clearRect(0, 0, 300, 300);
-      context.drawImage(bitmap, Math.round((300 - width) / 2), Math.round((300 - height) / 2), width, height);
-      bitmap.close();
-      const imageDataUrl = canvas.toDataURL("image/webp", 0.78);
-      if (imageDataUrl.length > 240_000) throw new Error("이미지 용량이 너무 커. 더 작은 파일을 골라 줘.");
-      await save({ imageDataUrl });
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "이미지를 처리하지 못했습니다.");
-    }
+    if (file.size > 20 * 1024 * 1024) { setError("원본 이미지가 너무 커. 20MB보다 작은 파일을 골라 줘."); return; }
+    setError("");
+    setCropFile(file);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const saved = await save({ name: String(form.get("name") ?? ""), summary: String(form.get("summary") ?? ""), description: String(form.get("description") ?? "") });
+    const saved = await save({ name: String(form.get("name") ?? ""), summary: String(form.get("summary") ?? ""), description: String(form.get("description") ?? ""), storyYear: Number(form.get("year")) });
     if (saved) setEditing(false);
   }
 
   async function remove() {
-    if (!window.confirm(`‘${person.name}’ 인물 문서와 댓글을 삭제할까?`)) return;
+    if (!(await confirmDelete(`‘${person.name}’ 인물 문서와 댓글을 삭제할까?`))) return;
     try {
       await apiPost({ action: "delete-character", id: person.id });
       await onSaved();
@@ -567,15 +809,13 @@ function CharacterCard({ person, index, onSaved }: { person: Character; index: n
   }
 
   return <article className="character-card">
-    <label className={`character-photo upload-photo ${busy ? "busy" : ""}`} title="클릭해서 이미지 올리기">
-      {person.imageDataUrl ? <img src={person.imageDataUrl} alt={`${person.name} 인물 이미지`} loading="lazy" decoding="async" /> : <span>CLICK TO UPLOAD<br />{String(index + 1).padStart(3, "0")}</span>}
-      <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => upload(event.target.files?.[0])} disabled={busy} />
-    </label>
+    <ImageUploadField imageDataUrl={person.imageDataUrl} name={person.name} index={index} onFile={chooseImage} busy={busy} />
     <div className="character-content"><p className="eyebrow">PERSON FILE / {String(index + 1).padStart(3, "0")}</p>
-      {editing ? <form className="character-editor" onSubmit={submit}><input name="name" defaultValue={person.name} maxLength={40} required /><input name="summary" defaultValue={person.summary} maxLength={120} /><textarea name="description" defaultValue={person.description} maxLength={6000} /><div><button type="button" onClick={() => setEditing(false)}>취소</button><button type="submit" disabled={busy}>저장</button></div></form> : <><h2>{person.name}</h2><strong>{person.summary}</strong><p className="character-description">{person.description}</p><div className="entry-actions"><button onClick={() => setEditing(true)}>수정</button><button onClick={remove}>삭제</button></div></>}
+      {editing ? <form className="character-editor" onSubmit={submit}><label>이름<input name="name" defaultValue={person.name} maxLength={40} required /></label><label>한 마디<input name="summary" defaultValue={person.summary} maxLength={120} /></label><label>극중 연도<select name="year" defaultValue={person.storyYear ?? 2011}>{characterYears.map((year) => <option key={year}>{year}</option>)}</select></label><label>인물 설명<textarea name="description" defaultValue={person.description} maxLength={6000} /></label><div><button type="button" onClick={() => setEditing(false)}>취소</button><button type="submit" disabled={busy}>저장</button></div></form> : <><h2>{person.name}</h2><strong>{person.summary}</strong><p className="character-description">{person.description}</p><div className="entry-actions"><button onClick={() => setEditing(true)}>수정</button><button onClick={remove}>삭제</button></div></>}
       {error && <p className="form-error standalone">{error}</p>}
     </div>
     <CommentsSection sectionId={`character-${person.id}`} />
+    {cropFile && <ImageCropEditor file={cropFile} onCancel={() => setCropFile(null)} onApply={async (imageDataUrl) => { const saved = await save({ imageDataUrl }); if (saved) setCropFile(null); }} />}
   </article>;
 }
 
@@ -594,6 +834,7 @@ function IslandPage() {
 }
 
 function RumorsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () => Promise<void> }) {
+  const confirmDelete = useSiteConfirm();
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
 
@@ -611,7 +852,7 @@ function RumorsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () =
   }
 
   async function remove(item: RecordItem) {
-    if (!window.confirm(`‘${item.title}’ 소문과 댓글을 삭제할까?`)) return;
+    if (!(await confirmDelete(`‘${item.title}’ 소문과 댓글을 삭제할까?`))) return;
     setError("");
     try {
       await apiPost({ action: "delete-record", id: item.id, ownerKey: localOwnerKey() });
@@ -645,6 +886,7 @@ function ChatPage({ rooms, onSaved }: { rooms: Room[]; onSaved: () => Promise<vo
 }
 
 function ChatLobby({ rooms, onSelect, onSaved }: { rooms: Room[]; onSelect: (id: string) => void; onSaved: () => Promise<void> }) {
+  const confirmDelete = useSiteConfirm();
   const [showCreate, setShowCreate] = useState(false);
   const [tab, setTab] = useState<"active" | "past">("active");
   const [error, setError] = useState("");
@@ -664,7 +906,7 @@ function ChatLobby({ rooms, onSelect, onSaved }: { rooms: Room[]; onSelect: (id:
   }
 
   async function remove(room: Room) {
-    if (!window.confirm(`‘${room.title}’ 방과 모든 대화 기록을 삭제할까?`)) return;
+    if (!(await confirmDelete(`‘${room.title}’ 방과 모든 대화 기록을 삭제할까?`))) return;
     try {
       await apiPost({ action: "delete-room", id: room.id, ownerKey: localOwnerKey() });
       await onSaved();

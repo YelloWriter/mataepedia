@@ -131,7 +131,7 @@ export async function GET(request: Request) {
          LIMIT 1000`,
       ),
       db.prepare(
-        `SELECT id, name, summary, description, image_data_url AS imageDataUrl,
+        `SELECT id, name, summary, description, story_year AS storyYear, image_data_url AS imageDataUrl,
                 sort_order AS sortOrder, updated_at AS updatedAt
          FROM characters
          ORDER BY sort_order ASC, name ASC
@@ -471,10 +471,12 @@ export async function POST(request: Request) {
       const name = text(payload.name, 40);
       const summary = text(payload.summary, 120);
       const description = text(payload.description, 6_000);
+      const storyYear = number(payload.storyYear) || 2011;
       const imageDataUrl = text(payload.imageDataUrl, 250_000) || null;
       const sortOrder = Math.max(0, Math.min(999, number(payload.sortOrder) || 0));
       const ownerKey = text(payload.ownerKey, 200);
       if (!id || !name || !ownerKey) return fail("인물 문서 정보를 확인해 주세요.");
+      if (![2011, 2015].includes(storyYear)) return fail("인물 연도는 2011년이나 2015년으로 골라 주세요.");
       if (imageDataUrl && !/^data:image\/(?:webp|jpeg|png);base64,/i.test(imageDataUrl)) {
         return fail("지원하지 않는 이미지 형식입니다.");
       }
@@ -488,18 +490,19 @@ export async function POST(request: Request) {
       await db
         .prepare(
           `INSERT INTO characters
-           (id, name, summary, description, image_data_url, owner_key_hash, sort_order)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+           (id, name, summary, description, story_year, image_data_url, owner_key_hash, sort_order)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
            ON CONFLICT(id) DO UPDATE SET
              name = excluded.name,
              summary = excluded.summary,
              description = excluded.description,
+             story_year = excluded.story_year,
              image_data_url = COALESCE(excluded.image_data_url, characters.image_data_url),
              owner_key_hash = excluded.owner_key_hash,
              sort_order = excluded.sort_order,
              updated_at = CURRENT_TIMESTAMP`,
         )
-        .bind(id, name, summary, description, imageDataUrl, await ownerHash(ownerKey), sortOrder)
+        .bind(id, name, summary, description, storyYear, imageDataUrl, await ownerHash(ownerKey), sortOrder)
         .run();
       return response({ id });
     }
