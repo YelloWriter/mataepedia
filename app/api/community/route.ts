@@ -310,6 +310,23 @@ export async function POST(request: Request) {
       return response({ id }, 201);
     }
 
+    if (action === "delete-record") {
+      const id = text(payload.id, 80);
+      const ownerKey = text(payload.ownerKey, 200);
+      if (!id || !ownerKey) return fail("삭제할 기록 정보가 없습니다.");
+      const record = await db
+        .prepare("SELECT owner_key_hash AS ownerKeyHash FROM records WHERE id = ?1")
+        .bind(id)
+        .first<{ ownerKeyHash: string }>();
+      if (!record) return fail("존재하지 않는 기록입니다.", 404);
+      if (record.ownerKeyHash !== await ownerHash(ownerKey)) return fail("이 브라우저에서 쓴 기록만 삭제할 수 있어.", 403);
+      await db.batch([
+        db.prepare("DELETE FROM comments WHERE section_id = ?1").bind(`record:${id}`),
+        db.prepare("DELETE FROM records WHERE id = ?1").bind(id),
+      ]);
+      return response({ ok: true });
+    }
+
     if (action === "add-comment") {
       const sectionId = text(payload.sectionId, 120);
       const parentId = text(payload.parentId, 80) || null;
