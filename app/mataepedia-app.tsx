@@ -55,6 +55,7 @@ const pages: { key: PageKey; label: string; code: string }[] = [
 ];
 
 const kindLabels = { diary: "일기", memo: "메모", guestbook: "방명록", rumor: "소문" } as const;
+const storyYears = [2011, 2012, 2013, 2014, 2015] as const;
 
 function localOwnerKey() {
   const storageKey = "mataepedia-owner-key";
@@ -166,7 +167,7 @@ export function MataepediaApp() {
           {!loading && page === "records" && <RecordsPage records={records} onSaved={refresh} />}
           {!loading && page === "people" && <PeoplePage characters={characters} onSaved={refresh} />}
           {!loading && page === "island" && <IslandPage />}
-          {!loading && page === "rumors" && <RumorsPage records={records.filter((item) => item.kind === "rumor")} go={go} />}
+          {!loading && page === "rumors" && <RumorsPage records={records.filter((item) => item.kind === "rumor")} onSaved={refresh} />}
           {!loading && page === "chat" && <ChatPage rooms={rooms} onSaved={refresh} />}
         </main>
       </div>
@@ -221,7 +222,7 @@ function HomePage({ go, rooms, records, onSaved }: { go: (page: PageKey) => void
       </section>
       <section className="quick-grid">
         <button onClick={() => go("timeline")}><small>01 / HISTORY</small><strong>2011년 이후 연표 보기</strong><span>사건 기록 {"->"}</span></button>
-        <button onClick={() => go("records")}><small>02 / RECORDS</small><strong>새 기록 남기기</strong><span>일기·메모·소문 {"->"}</span></button>
+        <button onClick={() => go("records")}><small>02 / RECORDS</small><strong>새 기록 남기기</strong><span>일기·메모 {"->"}</span></button>
         <button onClick={() => go("chat")}><small>06 / CHAT</small><strong>채팅방 들어가기</strong><span>{rooms.length}개 방 / 기록 공개 {"->"}</span></button>
       </section>
       <section className="guestbook-section">
@@ -291,7 +292,7 @@ function TimelinePage({ events, onSaved }: { events: TimelineEvent[]; onSaved: (
       <SectionTitle eyebrow="MATAEPEDIA / TIMELINE" title="연표" description="2011년의 사건부터 2015년까지. 기억나는 일이 있으면 날짜가 정확하지 않아도 남겨 둘 것." />
       <div className="toolbar"><button className="text-button" onClick={() => { if (showForm) { setShowForm(false); setEditing(null); } else { openEditor(); } }}>[ {showForm ? "닫기" : "+ 사건 추가"} ]</button></div>
       {showForm && <form key={editing?.id ?? "new-event"} className="editor-box" onSubmit={submit}>
-        <label>극중 연도<select name="year" defaultValue={editing?.storyYear ?? 2012}>{[2011, 2012, 2013, 2014, 2015].map((year) => <option key={year}>{year}</option>)}</select></label>
+        <label>극중 연도<select name="year" defaultValue={editing?.storyYear ?? 2012}>{storyYears.map((year) => <option key={year}>{year}</option>)}</select></label>
         <label>사건 제목<input name="title" defaultValue={editing?.title ?? ""} maxLength={100} required /></label>
         <label>기록한 사람<input name="author" defaultValue={editing?.authorName ?? ""} maxLength={24} required /></label>
         <label className="wide">사건 내용<textarea name="body" defaultValue={editing?.body ?? ""} maxLength={5000} required /></label>
@@ -305,7 +306,7 @@ function TimelinePage({ events, onSaved }: { events: TimelineEvent[]; onSaved: (
           <div className="year-events">{group.events.length ? group.events.map((item) => <article key={item.id} className="timeline-entry">
             <h2>{item.title}</h2><p>{item.body}</p><small>기록: {item.authorName}</small>
             <div className="entry-actions"><button onClick={() => openEditor(item)}>수정</button><button onClick={() => remove(item)}>삭제</button></div>
-            <CommentsSection sectionId={`timeline:${item.id}`} title="사건 댓글" />
+            <CommentsSection sectionId={`timeline:${item.id}`} />
           </article>) : <p className="empty-year">— 아직 기록 없음 —</p>}</div>
         </section>)}
       </div>
@@ -314,11 +315,11 @@ function TimelinePage({ events, onSaved }: { events: TimelineEvent[]; onSaved: (
 }
 
 function RecordsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () => Promise<void> }) {
-  const [filter, setFilter] = useState<"all" | RecordItem["kind"]>("all");
+  const [filter, setFilter] = useState<"diary" | "memo">("diary");
   const [selected, setSelected] = useState<RecordItem | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
-  const visible = filter === "all" ? records : records.filter((item) => item.kind === filter);
+  const visible = records.filter((item) => item.kind === filter);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -332,17 +333,27 @@ function RecordsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () 
     } catch (caught) { setError(caught instanceof Error ? caught.message : "저장하지 못했습니다."); }
   }
 
-  if (selected) return <RecordDocument record={selected} onBack={() => setSelected(null)} />;
+  async function remove(item: RecordItem) {
+    if (!window.confirm(`‘${item.title}’ 기록과 댓글을 삭제할까?`)) return;
+    setError("");
+    try {
+      await apiPost({ action: "delete-record", id: item.id, ownerKey: localOwnerKey() });
+      setSelected(null);
+      await onSaved();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "기록을 삭제하지 못했습니다."); }
+  }
+
+  if (selected) return <RecordDocument record={selected} onBack={() => setSelected(null)} onDelete={() => remove(selected)} error={error} />;
 
   return (
     <>
-      <SectionTitle eyebrow="MATAEPEDIA / RECORDS" title="우리 기록" description="생각해서 남기는 글. 일기, 메모, 방명록, 소문은 여기에서 분류한다." />
+      <SectionTitle eyebrow="MATAEPEDIA / RECORDS" title="우리 기록" />
       <div className="record-controls">
-        <div className="filter-tabs">{(["all", "diary", "memo", "guestbook", "rumor"] as const).map((key) => <button key={key} className={filter === key ? "active" : ""} onClick={() => setFilter(key)}>{key === "all" ? "전체" : kindLabels[key]}</button>)}</div>
+        <div className="filter-tabs">{(["diary", "memo"] as const).map((key) => <button key={key} className={filter === key ? "active" : ""} onClick={() => setFilter(key)}>{kindLabels[key]}</button>)}</div>
         <button className="text-button" onClick={() => setShowForm((value) => !value)}>[ + 새 기록 ]</button>
       </div>
       {showForm && <form className="editor-box" onSubmit={submit}>
-        <label>분류<select name="kind" defaultValue="diary"><option value="diary">일기</option><option value="memo">메모</option><option value="guestbook">방명록</option><option value="rumor">소문</option></select></label>
+        <label>분류<select name="kind" defaultValue={filter}><option value="diary">일기</option><option value="memo">메모</option></select></label>
         <label>극중 날짜<input name="date" type="date" min="2011-01-01" max="2015-12-31" defaultValue="2012-01-01" required /></label>
         <label>작성자<input name="author" maxLength={24} required /></label>
         <label className="wide">제목<input name="title" maxLength={100} required /></label>
@@ -350,24 +361,30 @@ function RecordsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () 
         {error && <p className="form-error">{error}</p>}
         <div className="form-actions"><button type="button" onClick={() => setShowForm(false)}>취소</button><button type="submit">기록 남기기</button></div>
       </form>}
-      <div className="records-table" role="table" aria-label="우리 기록 목록">
-        <div className="records-head" role="row"><span>날짜</span><span>분류</span><span>제목</span><span>작성자</span></div>
-        {visible.length ? visible.map((item) => <button className="records-row" role="row" key={item.id} onClick={() => setSelected(item)}><span>{item.storyDate}</span><span>[{kindLabels[item.kind]}]</span><strong>{item.title}</strong><span>{item.authorName}</span></button>) : <p className="empty table-empty">이 분류에는 아직 기록이 없어.</p>}
+      {!showForm && error && <p className="form-error standalone">{error}</p>}
+      <div className={`record-card-grid ${filter === "memo" ? "memo-grid" : "diary-grid"}`} aria-label="우리 기록 목록">
+        {visible.length ? visible.map((item) => <article className={`record-card ${item.kind}`} key={item.id}>
+          <button className="record-card-open" onClick={() => setSelected(item)}>
+            <span>{item.storyDate}</span><strong>{item.title}</strong><p>{item.body.slice(0, 150)}{item.body.length > 150 ? "…" : ""}</p><small>{item.authorName}</small>
+          </button>
+          <button className="record-delete" onClick={() => remove(item)}>[ 삭제 ]</button>
+        </article>) : <p className="empty table-empty">이 분류에는 아직 기록이 없어.</p>}
       </div>
     </>
   );
 }
 
-function RecordDocument({ record, onBack }: { record: RecordItem; onBack: () => void }) {
+function RecordDocument({ record, onBack, onDelete, error }: { record: RecordItem; onBack: () => void; onDelete: () => void; error: string }) {
   return <>
-    <button className="back-link" onClick={onBack}>{"<-"} 기록 목록</button>
+    <div className="document-actions"><button className="back-link" onClick={onBack}>{"<-"} 기록 목록</button><button className="text-button" onClick={onDelete}>[ 기록 삭제 ]</button></div>
     <SectionTitle eyebrow={`RECORD / ${kindLabels[record.kind]}`} title={record.title} description={`${record.storyDate} / ${record.authorName}`} />
     <article className="document-body">{record.body.split("\n").map((line, index) => <p key={index}>{line || <>&nbsp;</>}</p>)}</article>
-    <CommentsSection sectionId={`record:${record.id}`} title="우리끼리 이야기" initiallyOpen />
+    {error && <p className="form-error standalone">{error}</p>}
+    <CommentsSection sectionId={`record:${record.id}`} initiallyOpen />
   </>;
 }
 
-function CommentsSection({ sectionId, title = "댓글", initiallyOpen = false }: { sectionId: string; title?: string; initiallyOpen?: boolean }) {
+function CommentsSection({ sectionId, initiallyOpen = false }: { sectionId: string; initiallyOpen?: boolean }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [open, setOpen] = useState(initiallyOpen);
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -402,7 +419,7 @@ function CommentsSection({ sectionId, title = "댓글", initiallyOpen = false }:
   const roots = comments.filter((item) => !item.parentId || !knownIds.has(item.parentId));
 
   return <section className={`comments-section ${open ? "open" : "collapsed"}`}>
-    <div className="comments-heading"><h2>{title} {open && <small>{comments.length}</small>}</h2><button className="text-button" onClick={() => setOpen((value) => !value)}>[ {open ? "댓글 닫기" : "댓글 보기"} ]</button></div>
+    <div className="comments-heading titleless"><button className="text-button" onClick={() => setOpen((value) => !value)}>[ {open ? `댓글 닫기 · ${comments.length}` : "댓글 보기"} ]</button></div>
     {open && <>
       {roots.length ? roots.map((comment) => <CommentBranch key={comment.id} comment={comment} comments={comments} depth={0} onReply={setReplyTo} onChanged={load} onError={setError} />) : <p className="empty">아직 댓글이 없어.</p>}
       <form className="comment-form" onSubmit={submit}>
@@ -558,12 +575,12 @@ function CharacterCard({ person, index, onSaved }: { person: Character; index: n
       {editing ? <form className="character-editor" onSubmit={submit}><input name="name" defaultValue={person.name} maxLength={40} required /><input name="summary" defaultValue={person.summary} maxLength={120} /><textarea name="description" defaultValue={person.description} maxLength={6000} /><div><button type="button" onClick={() => setEditing(false)}>취소</button><button type="submit" disabled={busy}>저장</button></div></form> : <><h2>{person.name}</h2><strong>{person.summary}</strong><p className="character-description">{person.description}</p><div className="entry-actions"><button onClick={() => setEditing(true)}>수정</button><button onClick={remove}>삭제</button></div></>}
       {error && <p className="form-error standalone">{error}</p>}
     </div>
-    <CommentsSection sectionId={`character-${person.id}`} title={`${person.name} 댓글`} />
+    <CommentsSection sectionId={`character-${person.id}`} />
   </article>;
 }
 
-function LegacyDocument({ sectionId, title, children }: { sectionId: string; title: string; children: ReactNode }) {
-  return <article className="legacy-document"><h2>{title}</h2><div className="legacy-document-body">{children}</div><CommentsSection sectionId={sectionId} /></article>;
+function LegacyDocument({ sectionId, title, year, children }: { sectionId: string; title: string; year?: number; children: ReactNode }) {
+  return <article className="legacy-document"><div className="legacy-document-heading"><h2>{title}</h2>{year && <time>{year}</time>}</div><div className="legacy-document-body">{children}</div><CommentsSection sectionId={sectionId} /></article>;
 }
 
 function IslandPage() {
@@ -576,12 +593,47 @@ function IslandPage() {
   </>;
 }
 
-function RumorsPage({ records, go }: { records: RecordItem[]; go: (page: PageKey) => void }) {
+function RumorsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () => Promise<void> }) {
+  const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    setError("");
+    try {
+      await apiPost({ action: "create-record", kind: "rumor", title: form.get("title"), body: form.get("body"), authorName: form.get("author"), storyDate: `${form.get("year")}-01-01`, ownerKey: localOwnerKey() });
+      formElement.reset();
+      setShowForm(false);
+      await onSaved();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "소문을 남기지 못했습니다."); }
+  }
+
+  async function remove(item: RecordItem) {
+    if (!window.confirm(`‘${item.title}’ 소문과 댓글을 삭제할까?`)) return;
+    setError("");
+    try {
+      await apiPost({ action: "delete-record", id: item.id, ownerKey: localOwnerKey() });
+      await onSaved();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "소문을 삭제하지 못했습니다."); }
+  }
+
   return <>
     <SectionTitle eyebrow="MATAEPEDIA / RUMORS" title="소문" description="사실인지 아닌지 모르는 이야기. 확인 전에는 문서 앞에 [?]를 붙인다." />
-    <LegacyDocument sectionId="rumor-1" title="[?] 학교 괴담"><p>마태 초중고등학교는 초·중·고가 하나로 묶인 특이한 학교고, 비어 있는 교실도 여럿 있어.</p><p>밤에 몰래 들어갔다 수위 아저씨에게 들키면 큰일 난다는 이야기, 수위 아저씨가 사람을 잡아먹는 커다란 뱀이라는 이야기가 돌아.</p></LegacyDocument>
-    <LegacyDocument sectionId="rumor-2" title="[?] 마을 외곽의 이상한 소문"><p>말총곶 등대에서는 물귀신 노랫소리가 들리고, 비 오는 밤 괴불림에서는 사람들이 길을 잃는다고 해.</p><p>마두산의 정기를 받으면 중간시험 1등을 한다는 말도 있어.</p></LegacyDocument>
-    <section className="wiki-section"><h2>새로 모인 소문</h2><div className="rumor-list">{records.length ? records.map((item) => <article key={item.id}><span>[?]</span><div><h2>{item.title}</h2><p>{item.body.slice(0, 180)}{item.body.length > 180 ? "…" : ""}</p><small>{item.storyDate} / {item.authorName}</small></div></article>) : <div className="empty-box"><strong>새로 등록된 소문 없음</strong><p>우리 기록에서 분류를 ‘소문’으로 선택하면 여기에 나타나.</p><button className="text-button" onClick={() => go("records")}>[ 소문 남기기 ]</button></div>}</div></section>
+    <div className="toolbar"><button className="text-button" onClick={() => setShowForm((value) => !value)}>[ {showForm ? "닫기" : "+ 소문 남기기"} ]</button></div>
+    {showForm && <form className="editor-box" onSubmit={submit}>
+      <label>극중 연도<select name="year" defaultValue="2011">{storyYears.map((year) => <option key={year}>{year}</option>)}</select></label>
+      <label>작성자<input name="author" maxLength={24} required /></label>
+      <label className="wide">소문 제목<input name="title" maxLength={100} required /></label>
+      <label className="wide">소문 내용<textarea name="body" maxLength={10000} required /></label>
+      {error && <p className="form-error">{error}</p>}
+      <div className="form-actions"><button type="button" onClick={() => setShowForm(false)}>취소</button><button type="submit">소문 남기기</button></div>
+    </form>}
+    {!showForm && error && <p className="form-error standalone">{error}</p>}
+    <LegacyDocument sectionId="rumor-1" title="[?] 학교 괴담" year={2011}><p>마태 초중고등학교는 초·중·고가 하나로 묶인 특이한 학교고, 비어 있는 교실도 여럿 있어.</p><p>밤에 몰래 들어갔다 수위 아저씨에게 들키면 큰일 난다는 이야기, 수위 아저씨가 사람을 잡아먹는 커다란 뱀이라는 이야기가 돌아.</p></LegacyDocument>
+    <LegacyDocument sectionId="rumor-2" title="[?] 마을 외곽의 이상한 소문" year={2011}><p>말총곶 등대에서는 물귀신 노랫소리가 들리고, 비 오는 밤 괴불림에서는 사람들이 길을 잃는다고 해.</p><p>마두산의 정기를 받으면 중간시험 1등을 한다는 말도 있어.</p></LegacyDocument>
+    <section className="wiki-section"><h2>새로 모인 소문</h2><div className="rumor-list">{records.length ? records.map((item) => <article key={item.id}><span>[?]</span><div><div className="rumor-heading"><h2>{item.title}</h2><time>{item.storyDate.slice(0, 4)}</time></div><p>{item.body}</p><small>{item.authorName}</small><div className="entry-actions"><button onClick={() => remove(item)}>삭제</button></div><CommentsSection sectionId={`record:${item.id}`} /></div></article>) : <div className="empty-box"><strong>새로 등록된 소문 없음</strong><p>위의 ‘소문 남기기’에서 연도를 골라 적어 줘.</p></div>}</div></section>
   </>;
 }
 
