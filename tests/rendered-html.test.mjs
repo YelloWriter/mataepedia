@@ -59,6 +59,10 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(app, /ImageCropEditor/);
   assert.match(app, /SFX \{enabled \? "ON" : "OFF"\}/);
   assert.match(app, /한 마디/);
+  assert.match(app, /visibleYears = tab === "active" \? \[2015\] : \[2011, 2012, 2013, 2014\]/);
+  assert.match(app, /defaultValue="2015"/);
+  assert.match(app, /system-message/);
+  assert.match(app, /navigator\.sendBeacon/);
   assert.doesNotMatch(app, /window\.(?:confirm|alert)/);
   assert.doesNotMatch(app, /ENTRIES/);
   assert.doesNotMatch(app, /최근 변경/);
@@ -69,8 +73,14 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(api, /messagesPerRoom:\s*5_000/);
   assert.match(api, /WITH RECURSIVE descendants/);
   assert.match(api, /story_year AS storyYear/);
+  assert.match(api, /님이 입장하셨습니다\./);
+  assert.match(api, /님이 퇴장하셨습니다\./);
+  assert.match(api, /author_name, body\) VALUES \(\?1, \?2, 'SYSTEM', \?3\)/);
   assert.match(css, /Pretendard Variable/);
   assert.match(css, /\.character-photo img[^}]*filter: none/);
+  assert.match(css, /\.character-photo img[^}]*object-fit: contain/);
+  assert.match(css, /\.character-photo \{[^}]*height: clamp\(/);
+  assert.match(css, /\.chat-year-groups/);
   assert.match(css, /\.comment-form[^}]*grid-template-columns: minmax\(0, 1fr\)/);
   assert.equal((legacyMigration.match(/INSERT OR IGNORE INTO comments/g) ?? []).length, 64);
   assert.equal((legacyMigration.match(/INSERT OR IGNORE INTO characters/g) ?? []).length, 11);

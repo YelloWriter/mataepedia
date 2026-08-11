@@ -175,8 +175,8 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .character-grid { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line-dark); border-left: 1px solid var(--line-dark); }
 .character-grid > .empty-box { grid-column: 1 / -1; border-top: 0; border-left: 0; }
 .character-card { min-height: 330px; border-right: 1px solid var(--line-dark); border-bottom: 1px solid var(--line-dark); padding: 22px; display: flex; flex-direction: column; gap: 18px; }
-.character-photo { width: 100%; height: 240px; border: 1px solid var(--line-dark); display: grid; place-items: center; background: var(--paper-light); overflow: hidden; }
-.character-photo img { width: 100%; height: 100%; object-fit: cover; filter: none; }
+.character-photo { width: 100%; height: clamp(190px, 24vw, 240px); border: 1px solid var(--line-dark); display: grid; place-items: center; background: var(--paper-light); overflow: hidden; }
+.character-photo img { display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; filter: none; }
 .character-photo span { text-align: center; color: var(--muted); font: .7rem/1.5 "Courier New", monospace; }
 .upload-photo { cursor: pointer; position: relative; }
 .upload-photo:hover::after { content: "이미지 바꾸기"; position: absolute; inset: auto 0 0; padding: 6px; background: var(--inverse); color: var(--paper-light); text-align: center; font: .62rem "Courier New", monospace; }
@@ -228,7 +228,12 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .chat-summary button { margin-left: auto; }
 .chat-tabs { display: flex; margin: 28px 0 0; border: 1px solid var(--line-dark); width: max-content; }
 .chat-tabs button:last-child { border: 0; }
+.chat-year-groups { display: grid; gap: 34px; margin-top: 24px; }
+.chat-year-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding-bottom: 9px; border-bottom: 3px double var(--line-dark); }
+.chat-year-heading strong { font-size: 1.25rem; }
+.chat-year-heading span { color: var(--muted); font-size: .7rem; }
 .room-list { border-top: 2px solid var(--line-dark); margin-top: 14px; }
+.room-list .empty-box.compact { padding: 20px; border-top: 0; }
 .room-row { display: grid; grid-template-columns: 90px minmax(0, 1fr) 130px; gap: 22px; border-bottom: 1px solid var(--line-dark); padding: 22px 8px; }
 .room-number { color: var(--muted); font-size: .65rem; }
 .room-year { margin: 0; color: var(--muted); font-size: .68rem; }
@@ -248,6 +253,10 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .chat-log header { display: flex; flex-direction: column; gap: 3px; }
 .chat-log time { color: var(--muted); font-size: .6rem; }
 .chat-log p { margin: 0; line-height: 1.6; white-space: pre-wrap; }
+.chat-log article.system-message { display: flex; align-items: baseline; justify-content: center; gap: 12px; color: var(--muted); text-align: center; }
+.chat-log article.system-message header { flex-direction: row; align-items: baseline; gap: 8px; }
+.chat-log article.system-message strong { font-size: .65rem; letter-spacing: .08em; }
+.chat-log article.system-message p { font-size: .78rem; }
 .empty-log { text-align: center; margin-top: 140px; color: var(--muted); font: .75rem "Courier New", monospace; }
 .join-panel { display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--line-dark); border-top: 0; padding: 14px; }
 .join-panel p { margin: 0; font-size: .78rem; color: var(--muted); }
@@ -315,12 +324,13 @@ input, textarea { caret-color: var(--ink); }
   .comment-form { grid-template-columns: 1fr; }
   .comment-form > * { grid-column: 1; }
   .character-card { min-height: 0; padding: 15px; gap: 15px; }
-  .character-photo { height: 230px; }
+  .character-photo { height: clamp(180px, 52vw, 220px); }
   .room-row { grid-template-columns: 1fr; gap: 10px; }
   .room-status { border-left: 0; border-top: 1px dotted var(--line); padding: 10px 0 0; align-items: flex-start; display: grid; grid-template-columns: auto auto 1fr; gap: 5px; }
   .room-status > div { justify-self: end; }
   .chat-log article { grid-template-columns: 1fr; gap: 6px; }
   .chat-log header { flex-direction: row; align-items: baseline; gap: 8px; }
+  .chat-log article.system-message { flex-direction: column; align-items: center; gap: 4px; }
   .message-form { grid-template-columns: 1fr auto; }
   .message-form > span { grid-column: 1 / -1; }
   .message-form button:last-child { grid-column: 1 / -1; }

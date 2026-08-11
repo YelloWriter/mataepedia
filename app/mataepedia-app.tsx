@@ -890,7 +890,7 @@ function ChatLobby({ rooms, onSelect, onSaved }: { rooms: Room[]; onSelect: (id:
   const [showCreate, setShowCreate] = useState(false);
   const [tab, setTab] = useState<"active" | "past">("active");
   const [error, setError] = useState("");
-  const visible = rooms.filter((room) => tab === "active" ? room.status === "active" : room.status === "closed");
+  const visibleYears = tab === "active" ? [2015] : [2011, 2012, 2013, 2014];
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError("");
@@ -917,13 +917,19 @@ function ChatLobby({ rooms, onSelect, onSaved }: { rooms: Room[]; onSelect: (id:
     <SectionTitle eyebrow="MATAEPEDIA / CHAT" title="채팅" description="대화 기록은 누구나 읽을 수 있어. 말을 하려면 방에 입장해야 해." />
     <div className="chat-summary"><span>ROOMS {rooms.length.toString().padStart(2, "0")}</span><span>ONLINE {rooms.reduce((sum, room) => sum + Number(room.onlineCount || 0), 0).toString().padStart(2, "0")}</span><button className="text-button" onClick={() => setShowCreate((value) => !value)}>[ + 방 만들기 ]</button></div>
     {showCreate && <form className="editor-box" onSubmit={submit}>
-      <label>만든 사람<input name="creator" maxLength={24} required /></label><label>극중 연도<select name="year" defaultValue="2012">{[2011, 2012, 2013, 2014, 2015].map((year) => <option key={year}>{year}</option>)}</select></label>
+      <label>만든 사람<input name="creator" maxLength={24} required /></label><label>극중 연도<select name="year" defaultValue="2015">{storyYears.map((year) => <option key={year}>{year}</option>)}</select></label>
       <label className="wide">방 이름<input name="title" maxLength={60} required /></label><label className="wide">방 설명<input name="description" maxLength={240} /></label>
       {error && <p className="form-error">{error}</p>}<div className="form-actions"><button type="button" onClick={() => setShowCreate(false)}>취소</button><button type="submit">만들기</button></div>
     </form>}
     {!showCreate && error && <p className="form-error standalone">{error}</p>}
     <div className="chat-tabs"><button className={tab === "active" ? "active" : ""} onClick={() => setTab("active")}>활성 방</button><button className={tab === "past" ? "active" : ""} onClick={() => setTab("past")}>지난 방</button></div>
-    <div className="room-list">{visible.length ? visible.map((room, index) => <article key={room.id} className="room-row"><span className="room-number">ROOM {String(index + 1).padStart(2, "0")}</span><div><p className="room-year">[{room.storyYear}]</p><h2>{room.title}</h2><p>{room.description || "설명 없음"}</p><small>만든 사람: {room.creatorName} / 마지막 기록: {shortDate(room.lastMessageAt)}</small></div><div className="room-status"><strong>{room.onlineCount || 0}</strong><span>ONLINE</span><div><button onClick={() => onSelect(room.id)}>대화기록 보기</button><button onClick={() => remove(room)}>방 삭제</button></div></div></article>) : <div className="empty-box"><strong>{tab === "active" ? "활성 채팅방이 없어." : "닫힌 채팅방이 없어."}</strong><p>누구나 방을 만들 수 있고, 모든 대화는 텍스트 기록으로 남아.</p></div>}</div>
+    <div className="chat-year-groups">{visibleYears.map((year) => {
+      const yearRooms = rooms.filter((room) => room.storyYear === year);
+      return <section className="chat-year-section" key={year}>
+        <header className="chat-year-heading"><strong>{year}년</strong><span>{schoolYears[year]}</span></header>
+        <div className="room-list">{yearRooms.length ? yearRooms.map((room, index) => <article key={room.id} className="room-row"><span className="room-number">ROOM {String(index + 1).padStart(2, "0")}</span><div><p className="room-year">[{room.storyYear}]</p><h2>{room.title}</h2><p>{room.description || "설명 없음"}</p><small>만든 사람: {room.creatorName} / 마지막 기록: {shortDate(room.lastMessageAt)}</small></div><div className="room-status"><strong>{room.onlineCount || 0}</strong><span>ONLINE</span><div><button onClick={() => onSelect(room.id)}>대화기록 보기</button><button onClick={() => remove(room)}>방 삭제</button></div></div></article>) : <div className="empty-box compact"><strong>— {year}년 방 없음 —</strong></div>}</div>
+      </section>;
+    })}</div>
   </>;
 }
 
@@ -959,6 +965,14 @@ function ChatRoom({ room, onBack }: { room: Room; onBack: () => void }) {
 
   useEffect(() => { load(); const timer = window.setInterval(load, 10000); return () => window.clearInterval(timer); }, [load]);
   useEffect(() => { if (!joined) return; const timer = window.setInterval(() => apiPost({ action: "heartbeat", roomId: room.id, sessionId: sessionId.current, displayName }).catch(() => setJoined(false)), 30000); return () => window.clearInterval(timer); }, [joined, displayName, room.id]);
+  useEffect(() => {
+    if (!joined) return;
+    return () => {
+      if (!sessionId.current) return;
+      const data = new Blob([JSON.stringify({ action: "leave-room", sessionId: sessionId.current })], { type: "application/json" });
+      navigator.sendBeacon("/api/community", data);
+    };
+  }, [joined]);
 
   async function join(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError("");
@@ -968,8 +982,13 @@ function ChatRoom({ room, onBack }: { room: Room; onBack: () => void }) {
     catch (caught) { setError(caught instanceof Error ? caught.message : "입장하지 못했습니다."); }
   }
 
-  async function leave() {
-    await apiPost({ action: "leave-room", sessionId: sessionId.current }).catch(() => undefined); setJoined(false); setDisplayName(""); await load();
+  async function leave(refresh = true) {
+    await apiPost({ action: "leave-room", sessionId: sessionId.current }).catch(() => undefined); setJoined(false); setDisplayName(""); if (refresh) await load();
+  }
+
+  async function backToList() {
+    if (joined) await leave(false);
+    onBack();
   }
 
   async function send(event: FormEvent<HTMLFormElement>) {
@@ -981,11 +1000,11 @@ function ChatRoom({ room, onBack }: { room: Room; onBack: () => void }) {
   }
 
   return <>
-    <button className="back-link" onClick={onBack}>{"<-"} 채팅방 목록</button>
+    <button className="back-link" onClick={backToList}>{"<-"} 채팅방 목록</button>
     <SectionTitle eyebrow={`CHAT LOG / ${room.storyYear}`} title={room.title} description={room.description || "이 방에는 설명이 없어."} />
     <div className="online-strip"><span>ONLINE {online.length.toString().padStart(2, "0")}</span><p>{online.length ? online.map((person) => person.displayName).join(" / ") : "현재 입장한 사람 없음"}</p></div>
-    <div className="chat-log" aria-live="polite">{messages.length ? messages.map((message) => <article key={message.id}><header><strong>{message.authorName}</strong><time>{shortDate(message.createdAt)}</time></header><p>{message.body}</p></article>) : <p className="empty-log">— 아직 남은 대화가 없어 —</p>}<div ref={logEnd} /></div>
-    {room.status === "closed" ? <div className="closed-room">이 방은 닫혔어. 기록만 볼 수 있어.</div> : joined ? <form className="message-form" onSubmit={send}><span>{displayName} &gt;</span><input name="message" aria-label="채팅 메시지" maxLength={1000} autoComplete="off" required /><button type="submit">전송</button><button type="button" onClick={leave}>퇴장하기</button></form> : <div className="join-panel"><p>지금은 대화기록 보기 상태야. ONLINE에는 표시되지 않아.</p><button className="primary-retro" onClick={() => setShowJoin(true)}>입장하기</button></div>}
+    <div className="chat-log" aria-live="polite">{messages.length ? messages.map((message) => <article key={message.id} className={message.authorName === "SYSTEM" ? "system-message" : ""}><header><strong>{message.authorName === "SYSTEM" ? "SYSTEM" : message.authorName}</strong><time>{shortDate(message.createdAt)}</time></header><p>{message.body}</p></article>) : <p className="empty-log">— 아직 남은 대화가 없어 —</p>}<div ref={logEnd} /></div>
+    {room.status === "closed" ? <div className="closed-room">이 방은 닫혔어. 기록만 볼 수 있어.</div> : joined ? <form className="message-form" onSubmit={send}><span>{displayName} &gt;</span><input name="message" aria-label="채팅 메시지" maxLength={1000} autoComplete="off" required /><button type="submit">전송</button><button type="button" onClick={() => leave()}>퇴장하기</button></form> : <div className="join-panel"><p>지금은 대화기록 보기 상태야. ONLINE에는 표시되지 않아.</p><button className="primary-retro" onClick={() => setShowJoin(true)}>입장하기</button></div>}
     {showJoin && <div className="modal-backdrop" role="presentation"><form className="modal" onSubmit={join}><p className="eyebrow">ENTER CHATROOM</p><h2>채팅방에 들어갈 이름</h2><input name="name" maxLength={24} required />{error && <p className="form-error">{error}</p>}<div className="form-actions"><button type="button" onClick={() => setShowJoin(false)}>취소</button><button type="submit">입장</button></div></form></div>}
     {error && !showJoin && <p className="form-error standalone">{error}</p>}
   </>;

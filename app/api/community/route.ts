@@ -40,6 +40,14 @@ function fail(message: string, status = 400) {
   return response({ error: message }, status);
 }
 
+async function hasMessageCapacity(db: ReturnType<typeof getD1>, roomId: string) {
+  const [total, roomTotal] = await Promise.all([
+    db.prepare("SELECT COUNT(*) AS count FROM chat_messages").first<{ count: number }>(),
+    db.prepare("SELECT COUNT(*) AS count FROM chat_messages WHERE room_id = ?1").bind(roomId).first<{ count: number }>(),
+  ]);
+  return (total?.count ?? 0) < LIMITS.messages && (roomTotal?.count ?? 0) < LIMITS.messagesPerRoom;
+}
+
 export async function GET(request: Request) {
   const db = getD1();
   const url = new URL(request.url);
@@ -210,7 +218,11 @@ export async function POST(request: Request) {
       const roomId = text(payload.roomId, 80);
       const displayName = text(payload.displayName, 24);
       if (!sessionId || !roomId || !displayName) return fail("입장 정보가 올바르지 않습니다.");
-      await db
+      const room = await db.prepare("SELECT status FROM chat_rooms WHERE id = ?1").bind(roomId).first<{ status: string }>();
+      if (!room) return fail("존재하지 않는 방입니다.", 404);
+      if (room.status !== "active") return fail("닫힌 방에는 입장할 수 없습니다.", 409);
+
+      const presenceStatement = db
         .prepare(
           `INSERT INTO room_presence (session_id, room_id, display_name)
            VALUES (?1, ?2, ?3)
@@ -219,15 +231,42 @@ export async function POST(request: Request) {
              display_name = excluded.display_name,
              last_seen_at = CURRENT_TIMESTAMP`,
         )
-        .bind(sessionId, roomId, displayName)
-        .run();
+        .bind(sessionId, roomId, displayName);
+
+      if (action === "heartbeat") {
+        await presenceStatement.run();
+        return response({ ok: true });
+      }
+
+      if (!(await hasMessageCapacity(db, roomId))) return fail("채팅 기록 보관 한도에 도달했습니다.", 409);
+      const messageId = crypto.randomUUID();
+      await db.batch([
+        presenceStatement,
+        db.prepare("INSERT INTO chat_messages (id, room_id, author_name, body) VALUES (?1, ?2, 'SYSTEM', ?3)")
+          .bind(messageId, roomId, `${displayName}님이 입장하셨습니다.`),
+        db.prepare("UPDATE chat_rooms SET last_message_at = CURRENT_TIMESTAMP WHERE id = ?1").bind(roomId),
+      ]);
       return response({ ok: true });
     }
 
     if (action === "leave-room") {
       const sessionId = text(payload.sessionId, 120);
       if (sessionId) {
-        await db.prepare("DELETE FROM room_presence WHERE session_id = ?1").bind(sessionId).run();
+        const presence = await db
+          .prepare("SELECT room_id AS roomId, display_name AS displayName FROM room_presence WHERE session_id = ?1")
+          .bind(sessionId)
+          .first<{ roomId: string; displayName: string }>();
+        if (presence) {
+          const statements = [db.prepare("DELETE FROM room_presence WHERE session_id = ?1").bind(sessionId)];
+          if (await hasMessageCapacity(db, presence.roomId)) {
+            statements.push(
+              db.prepare("INSERT INTO chat_messages (id, room_id, author_name, body) VALUES (?1, ?2, 'SYSTEM', ?3)")
+                .bind(crypto.randomUUID(), presence.roomId, `${presence.displayName}님이 퇴장하셨습니다.`),
+              db.prepare("UPDATE chat_rooms SET last_message_at = CURRENT_TIMESTAMP WHERE id = ?1").bind(presence.roomId),
+            );
+          }
+          await db.batch(statements);
+        }
       }
       return response({ ok: true });
     }
@@ -257,14 +296,7 @@ export async function POST(request: Request) {
         .first();
       if (!member) return fail("먼저 채팅방에 입장해 주세요.", 403);
 
-      const [total, roomTotal] = await Promise.all([
-        db.prepare("SELECT COUNT(*) AS count FROM chat_messages").first<{ count: number }>(),
-        db
-          .prepare("SELECT COUNT(*) AS count FROM chat_messages WHERE room_id = ?1")
-          .bind(roomId)
-          .first<{ count: number }>(),
-      ]);
-      if ((total?.count ?? 0) >= LIMITS.messages || (roomTotal?.count ?? 0) >= LIMITS.messagesPerRoom) {
+      if (!(await hasMessageCapacity(db, roomId))) {
         return fail("채팅 기록 보관 한도에 도달했습니다.", 409);
       }
 
