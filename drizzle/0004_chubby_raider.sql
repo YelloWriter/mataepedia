@@ -1,0 +1,1 @@
+ALTER TABLE `characters` ADD `story_year` integer DEFAULT 2011 NOT NULL;
