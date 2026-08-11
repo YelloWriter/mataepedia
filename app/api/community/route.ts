@@ -103,7 +103,7 @@ export async function GET(request: Request) {
       return response({ comments: rows.results });
     }
 
-    const [rooms, records, events, characters, changes] = await db.batch([
+    const [rooms, records, events, characters] = await db.batch([
       db.prepare(
         `SELECT r.id, r.title, r.description, r.creator_name AS creatorName,
                 r.story_year AS storyYear, r.status, r.created_at AS createdAt,
@@ -137,20 +137,6 @@ export async function GET(request: Request) {
          ORDER BY sort_order ASC, name ASC
          LIMIT 100`,
       ),
-      db.prepare(
-        `SELECT * FROM (
-           SELECT 'record' AS type, id, title AS label, author_name AS actor,
-                  updated_at AS changedAt FROM records
-           UNION ALL
-           SELECT 'room' AS type, id, title AS label, creator_name AS actor,
-                  last_message_at AS changedAt FROM chat_rooms
-           UNION ALL
-           SELECT 'timeline' AS type, id, title AS label, author_name AS actor,
-                  created_at AS changedAt FROM timeline_events
-         )
-         ORDER BY changedAt DESC
-         LIMIT 20`,
-      ),
     ]);
 
     return response({
@@ -158,7 +144,6 @@ export async function GET(request: Request) {
       records: records.results,
       timelineEvents: events.results,
       characters: characters.results,
-      recentChanges: changes.results,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "자료를 읽지 못했습니다.";
@@ -200,6 +185,24 @@ export async function POST(request: Request) {
         .bind(id, title, description, creatorName, await ownerHash(ownerKey), storyYear)
         .run();
       return response({ id }, 201);
+    }
+
+    if (action === "delete-room") {
+      const id = text(payload.id, 80);
+      const ownerKey = text(payload.ownerKey, 200);
+      if (!id || !ownerKey) return fail("삭제할 방 정보가 없습니다.");
+      const room = await db
+        .prepare("SELECT creator_key_hash AS ownerKeyHash FROM chat_rooms WHERE id = ?1")
+        .bind(id)
+        .first<{ ownerKeyHash: string }>();
+      if (!room) return fail("존재하지 않는 방입니다.", 404);
+      if (room.ownerKeyHash !== await ownerHash(ownerKey)) return fail("이 브라우저에서 만든 방만 삭제할 수 있어.", 403);
+      await db.batch([
+        db.prepare("DELETE FROM room_presence WHERE room_id = ?1").bind(id),
+        db.prepare("DELETE FROM chat_messages WHERE room_id = ?1").bind(id),
+        db.prepare("DELETE FROM chat_rooms WHERE id = ?1").bind(id),
+      ]);
+      return response({ ok: true });
     }
 
     if (action === "join-room" || action === "heartbeat") {
@@ -331,6 +334,54 @@ export async function POST(request: Request) {
       return response({ id }, 201);
     }
 
+    if (action === "update-comment") {
+      const id = text(payload.id, 80);
+      const authorName = text(payload.authorName, 24);
+      const body = text(payload.body, 2_000);
+      const ownerKey = text(payload.ownerKey, 200);
+      if (!id || !authorName || !body || !ownerKey) return fail("수정할 댓글 내용을 확인해 주세요.");
+      const comment = await db
+        .prepare("SELECT owner_key_hash AS ownerKeyHash FROM comments WHERE id = ?1")
+        .bind(id)
+        .first<{ ownerKeyHash: string }>();
+      if (!comment) return fail("존재하지 않는 댓글입니다.", 404);
+      if (comment.ownerKeyHash !== await ownerHash(ownerKey)) return fail("이 브라우저에서 쓴 댓글만 수정할 수 있어.", 403);
+      await db
+        .prepare(
+          `UPDATE comments
+           SET author_name = ?2, body = ?3, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?1`,
+        )
+        .bind(id, authorName, body)
+        .run();
+      return response({ ok: true });
+    }
+
+    if (action === "delete-comment") {
+      const id = text(payload.id, 80);
+      const ownerKey = text(payload.ownerKey, 200);
+      if (!id || !ownerKey) return fail("삭제할 댓글 정보가 없습니다.");
+      const comment = await db
+        .prepare("SELECT owner_key_hash AS ownerKeyHash FROM comments WHERE id = ?1")
+        .bind(id)
+        .first<{ ownerKeyHash: string }>();
+      if (!comment) return fail("존재하지 않는 댓글입니다.", 404);
+      if (comment.ownerKeyHash !== await ownerHash(ownerKey)) return fail("이 브라우저에서 쓴 댓글만 삭제할 수 있어.", 403);
+      await db
+        .prepare(
+          `WITH RECURSIVE descendants(id) AS (
+             SELECT id FROM comments WHERE id = ?1
+             UNION ALL
+             SELECT child.id FROM comments child
+             JOIN descendants parent ON child.parent_id = parent.id
+           )
+           DELETE FROM comments WHERE id IN (SELECT id FROM descendants)`,
+        )
+        .bind(id)
+        .run();
+      return response({ ok: true });
+    }
+
     if (action === "create-event") {
       const storyYear = number(payload.storyYear);
       const title = text(payload.title, 100);
@@ -352,6 +403,50 @@ export async function POST(request: Request) {
         .bind(id, storyYear, title, body, authorName, await ownerHash(ownerKey))
         .run();
       return response({ id }, 201);
+    }
+
+    if (action === "update-event") {
+      const id = text(payload.id, 80);
+      const storyYear = number(payload.storyYear);
+      const title = text(payload.title, 100);
+      const body = text(payload.body, 5_000);
+      const authorName = text(payload.authorName, 24);
+      const ownerKey = text(payload.ownerKey, 200);
+      if (!id || storyYear < 2011 || storyYear > 2015 || !title || !body || !authorName || !ownerKey) {
+        return fail("사건의 필수 내용을 확인해 주세요.");
+      }
+      const event = await db
+        .prepare("SELECT owner_key_hash AS ownerKeyHash FROM timeline_events WHERE id = ?1")
+        .bind(id)
+        .first<{ ownerKeyHash: string }>();
+      if (!event) return fail("존재하지 않는 사건입니다.", 404);
+      if (event.ownerKeyHash !== await ownerHash(ownerKey)) return fail("이 브라우저에서 만든 사건만 수정할 수 있어.", 403);
+      await db
+        .prepare(
+          `UPDATE timeline_events
+           SET story_year = ?2, title = ?3, body = ?4, author_name = ?5
+           WHERE id = ?1`,
+        )
+        .bind(id, storyYear, title, body, authorName)
+        .run();
+      return response({ ok: true });
+    }
+
+    if (action === "delete-event") {
+      const id = text(payload.id, 80);
+      const ownerKey = text(payload.ownerKey, 200);
+      if (!id || !ownerKey) return fail("삭제할 사건 정보가 없습니다.");
+      const event = await db
+        .prepare("SELECT owner_key_hash AS ownerKeyHash FROM timeline_events WHERE id = ?1")
+        .bind(id)
+        .first<{ ownerKeyHash: string }>();
+      if (!event) return fail("존재하지 않는 사건입니다.", 404);
+      if (event.ownerKeyHash !== await ownerHash(ownerKey)) return fail("이 브라우저에서 만든 사건만 삭제할 수 있어.", 403);
+      await db.batch([
+        db.prepare("DELETE FROM comments WHERE section_id = ?1").bind(`timeline:${id}`),
+        db.prepare("DELETE FROM timeline_events WHERE id = ?1").bind(id),
+      ]);
+      return response({ ok: true });
     }
 
     if (action === "save-character") {
@@ -390,6 +485,18 @@ export async function POST(request: Request) {
         .bind(id, name, summary, description, imageDataUrl, await ownerHash(ownerKey), sortOrder)
         .run();
       return response({ id });
+    }
+
+    if (action === "delete-character") {
+      const id = text(payload.id, 80);
+      if (!id) return fail("삭제할 인물 정보가 없습니다.");
+      const character = await db.prepare("SELECT id FROM characters WHERE id = ?1").bind(id).first();
+      if (!character) return fail("존재하지 않는 인물입니다.", 404);
+      await db.batch([
+        db.prepare("DELETE FROM comments WHERE section_id = ?1").bind(`character-${id}`),
+        db.prepare("DELETE FROM characters WHERE id = ?1").bind(id),
+      ]);
+      return response({ ok: true });
     }
 
     return fail("지원하지 않는 요청입니다.", 404);
