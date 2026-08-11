@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css");
 
 :root {
   --paper: #e7e7df;
@@ -12,19 +13,28 @@
 
 * { box-sizing: border-box; }
 html { background: #c9cac3; color: var(--ink); }
-body { margin: 0; background: var(--paper); font-family: Arial, "Noto Sans KR", sans-serif; min-height: 100vh; }
+body { margin: 0; background: var(--paper); font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif; min-height: 100vh; }
 button, input, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+::selection { background: var(--inverse); color: var(--paper-light); }
 
-.site-shell { min-height: 100vh; max-width: 1440px; margin: 0 auto; background: var(--paper); border-inline: 1px solid var(--line); }
+.site-shell { position: relative; isolation: isolate; min-height: 100vh; max-width: 1440px; margin: 0 auto; background: var(--paper); border-inline: 1px solid var(--line); }
+.site-shell::before { content: ""; position: fixed; inset: 0; z-index: 100; pointer-events: none; opacity: .07; background: repeating-linear-gradient(to bottom, transparent 0, transparent 3px, #111 4px); mix-blend-mode: multiply; }
 .topbar { min-height: 112px; display: flex; justify-content: space-between; align-items: center; padding: 24px 34px; border-bottom: 3px double var(--line-dark); }
 .wordmark { display: flex; flex-direction: column; gap: 4px; text-align: left; border: 0; background: transparent; padding: 0; }
 .wordmark span { font-family: "Courier New", monospace; font-size: clamp(2rem, 5vw, 4rem); font-weight: 900; letter-spacing: -.08em; line-height: .9; }
 .wordmark small, .system-note, .eyebrow, .nav-label, footer, time, .room-number, .year-marker, .chat-summary, .online-strip, .record-controls, .records-head, .room-year, .terminal-loading { font-family: "Courier New", monospace; }
 .wordmark small { font-size: .7rem; letter-spacing: .12em; }
 .system-note { text-align: right; font-size: .68rem; line-height: 1.65; letter-spacing: .06em; }
-.status-dot { width: 7px; height: 7px; background: var(--ink); display: inline-block; margin-right: 5px; border-radius: 50%; }
+.topbar-tools { display: flex; align-items: center; justify-content: flex-end; gap: 22px; }
+.sound-controls { display: flex; align-items: center; gap: 10px; padding-right: 20px; border-right: 1px dotted var(--line); font-size: .65rem; white-space: nowrap; }
+.sound-controls button { border: 1px solid var(--line-dark); background: transparent; padding: 5px 8px; }
+.sound-controls button[aria-pressed="true"] { background: var(--inverse); color: var(--paper-light); }
+.sound-controls label { display: flex; align-items: center; gap: 7px; }
+.sound-controls input { width: 82px; padding: 0; accent-color: var(--ink); }
+.status-dot { width: 7px; height: 7px; background: var(--ink); display: inline-block; margin-right: 5px; border-radius: 50%; animation: statusPulse 1.35s steps(2, end) infinite; }
+.terminal-cursor { animation: blink .9s steps(1) infinite; }
 .layout-grid { display: grid; grid-template-columns: 220px minmax(0, 1fr); }
 .sidebar { min-height: calc(100vh - 151px); border-right: 1px solid var(--line-dark); padding: 28px 20px; }
 .nav-label { font-size: .66rem; letter-spacing: .09em; color: var(--muted); margin: 0 0 14px; }
@@ -36,11 +46,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .sidebar-block p { margin: 0 0 6px; font: .62rem "Courier New", monospace; }
 .sidebar-block strong { font: 1rem "Courier New", monospace; letter-spacing: .08em; }
 .sidebar-warning { margin-top: 18px; color: var(--muted); font-size: .72rem; line-height: 1.6; }
-.content { min-width: 0; padding: 42px clamp(24px, 5vw, 76px) 80px; }
+.content { min-width: 0; padding: 42px clamp(24px, 5vw, 76px) 80px; animation: screenIn .22s steps(3, end); }
 .notice-line { border: 1px dashed var(--line-dark); padding: 8px 12px; font: .72rem "Courier New", monospace; margin-bottom: 24px; }
 .terminal-loading { min-height: 50vh; display: grid; place-items: center; }
 .terminal-loading span { animation: blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
+@keyframes statusPulse { 50% { opacity: .28; } }
+@keyframes screenIn { 0% { opacity: .3; transform: translateY(3px); clip-path: inset(0 0 92% 0); } 75% { opacity: .88; clip-path: inset(0); } 100% { opacity: 1; transform: none; } }
 .document-header { max-width: 960px; }
 .eyebrow { margin: 0 0 10px; font-size: .7rem; letter-spacing: .13em; color: var(--muted); }
 .document-header h1 { margin: 0; font-family: "Courier New", monospace; font-size: clamp(2.1rem, 6vw, 4.8rem); letter-spacing: -.09em; line-height: .98; }
@@ -151,27 +163,40 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .comment-edit-form > div { display: flex; justify-content: flex-end; gap: 7px; }
 .comment-edit-form button { border: 1px solid var(--line-dark); background: transparent; padding: 6px 9px; font: .68rem "Courier New", monospace; }
 .comment-edit-form button:last-child { background: var(--inverse); color: var(--paper-light); }
-.comment-form { margin-top: 22px; display: grid; grid-template-columns: 140px 1fr auto; align-items: start; }
+.comment-form { margin-top: 22px; display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 9px; max-width: 680px; }
 .comment-form textarea { min-height: 82px; resize: none; }
-.comment-form > button { min-height: 42px; }
-.replying, .comment-form .form-error { grid-column: 1 / -1; }
+.comment-form > button { min-height: 42px; justify-self: end; }
+.replying, .comment-form .form-error { grid-column: 1; }
 .replying button { border: 0; background: none; text-decoration: underline; }
+.character-years { display: grid; gap: 46px; }
+.character-year-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; border-bottom: 3px double var(--line-dark); margin-bottom: 16px; }
+.character-year-heading .eyebrow { margin: 0 0 10px; }
+.character-year-heading h2 { margin: 0 0 8px; font-size: 1.8rem; }
 .character-grid { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line-dark); border-left: 1px solid var(--line-dark); }
+.character-grid > .empty-box { grid-column: 1 / -1; border-top: 0; border-left: 0; }
 .character-card { min-height: 330px; border-right: 1px solid var(--line-dark); border-bottom: 1px solid var(--line-dark); padding: 22px; display: flex; flex-direction: column; gap: 18px; }
 .character-photo { width: 100%; height: 240px; border: 1px solid var(--line-dark); display: grid; place-items: center; background: var(--paper-light); overflow: hidden; }
-.character-photo img { width: 100%; height: 100%; object-fit: contain; filter: grayscale(1); }
+.character-photo img { width: 100%; height: 100%; object-fit: cover; filter: none; }
 .character-photo span { text-align: center; color: var(--muted); font: .7rem/1.5 "Courier New", monospace; }
 .upload-photo { cursor: pointer; position: relative; }
 .upload-photo:hover::after { content: "이미지 바꾸기"; position: absolute; inset: auto 0 0; padding: 6px; background: var(--inverse); color: var(--paper-light); text-align: center; font: .62rem "Courier New", monospace; }
+.upload-photo.dragging::after { content: "여기에 놓기"; inset: 0; display: grid; place-items: center; font-size: .9rem; }
 .upload-photo.busy { opacity: .55; cursor: wait; }
-.upload-photo input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.upload-photo input, .image-drop-field input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.character-image-field { display: flex; flex-direction: column; gap: 7px; font-size: .72rem; }
+.character-image-field small { color: var(--muted); font-size: .68rem; }
+.image-drop-field { position: relative; min-height: 210px; border: 1px dashed var(--line-dark); background: #f7f7f1; display: grid; place-items: center; overflow: hidden; cursor: pointer; }
+.image-drop-field img { display: block; width: 100%; height: 260px; object-fit: contain; }
+.image-drop-field span { text-align: center; color: var(--muted); line-height: 1.7; }
+.image-drop-field.dragging { color: var(--paper-light); background: var(--inverse); outline: 4px double var(--paper-light); outline-offset: -9px; }
 .character-card h2 { margin: 0 0 6px; font: 700 1.6rem "Courier New", monospace; }
 .character-card strong { font-size: .78rem; }
 .character-card p:not(.eyebrow) { line-height: 1.7; color: #3e403b; font-size: .85rem; }
 .character-content { min-width: 0; }
 .character-description { min-height: 90px; white-space: pre-wrap; padding: 10px 0; border-block: 1px dotted var(--line); }
 .character-card > .comments-section { width: 100%; max-width: none; margin-top: 4px; }
-.character-editor { display: flex; flex-direction: column; gap: 7px; }
+.character-editor { display: flex; flex-direction: column; gap: 9px; }
+.character-editor label { display: flex; flex-direction: column; gap: 5px; font-size: .68rem; }
 .character-editor textarea { height: 120px; min-height: 120px; resize: none; }
 .character-editor > div { display: flex; justify-content: flex-end; gap: 6px; }
 .character-editor button { border: 1px solid var(--line-dark); background: transparent; padding: 6px 10px; font: .68rem "Courier New", monospace; }
@@ -230,14 +255,29 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .message-form input { padding: 8px; }
 .closed-room { border: 1px solid var(--line-dark); border-top: 0; padding: 18px; text-align: center; font: .75rem "Courier New", monospace; }
 .standalone { margin-top: 10px; }
-.modal-backdrop { position: fixed; inset: 0; background: rgba(18,19,15,.72); z-index: 50; display: grid; place-items: center; padding: 20px; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(18,19,15,.72); z-index: 200; display: grid; place-items: center; padding: 20px; }
 .modal { width: min(460px, 100%); background: var(--paper); border: 2px solid var(--ink); box-shadow: 9px 9px 0 #000; padding: 28px; }
 .modal h2 { font: 700 1.1rem "Courier New", monospace; margin: 0 0 18px; }
 .modal .form-actions { margin-top: 18px; }
+.confirm-modal p:not(.eyebrow) { line-height: 1.7; }
+.crop-backdrop { overflow-y: auto; }
+.crop-modal { width: min(560px, 100%); }
+.crop-stage { width: min(360px, 100%); margin: 0 auto; border: 1px solid var(--line-dark); background-color: #d2d3cc; background-image: linear-gradient(45deg, #b8bab2 25%, transparent 25%), linear-gradient(-45deg, #b8bab2 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #b8bab2 75%), linear-gradient(-45deg, transparent 75%, #b8bab2 75%); background-size: 20px 20px; background-position: 0 0, 0 10px, 10px -10px, -10px 0; overflow: hidden; }
+.crop-stage canvas { display: block; width: 100%; height: auto; cursor: grab; touch-action: none; }
+.crop-stage canvas:active { cursor: grabbing; }
+.zoom-control { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; margin-top: 16px; font-size: .7rem; }
+.zoom-control input { padding: 0; accent-color: var(--ink); }
+.crop-help { margin: 10px 0 0; color: var(--muted); text-align: center; font-size: .72rem; }
 .change-log { border-top: 2px solid var(--line-dark); }
 .change-log article { display: grid; grid-template-columns: 150px 90px 1fr 120px; gap: 12px; border-bottom: 1px dotted var(--line); padding: 12px 8px; align-items: baseline; }
 .change-log time, .change-log span, .change-log small { font: .65rem "Courier New", monospace; color: var(--muted); }
 footer { min-height: 39px; padding: 12px 24px; border-top: 1px solid var(--line-dark); display: flex; justify-content: space-between; font-size: .62rem; color: var(--muted); }
+
+.site-shell, .site-shell * { font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+.site-shell .wordmark span { font-family: "Courier New", monospace; }
+button, a, select, .upload-photo, .image-drop-field { transition: background-color .08s steps(2, end), color .08s steps(2, end), transform .06s steps(1, end); }
+button:active, a:active, .upload-photo:active, .image-drop-field:active { transform: translate(1px, 1px); }
+input, textarea { caret-color: var(--ink); }
 
 @media (max-width: 900px) {
   .layout-grid { grid-template-columns: 1fr; }
