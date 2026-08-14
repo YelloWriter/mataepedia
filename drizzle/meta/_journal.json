@@ -36,6 +36,13 @@
       "when": 1786440642719,
       "tag": "0004_chubby_raider",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1786689900000,
+      "tag": "0005_quovadis_aftermath",
+      "breakpoints": true
     }
   ]
 }

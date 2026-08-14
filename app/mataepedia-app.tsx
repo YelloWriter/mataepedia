@@ -300,6 +300,16 @@ function shortDate(value: string) {
   return value.replace("T", " ").slice(0, 16);
 }
 
+function storyDateLabel(value: string) {
+  const [year, month, day] = value.split("-");
+  if (year && (month === "00" || day === "00")) return `${year} / 날짜 불명`;
+  return value;
+}
+
+function isOfficialEntry(id: string) {
+  return id.startsWith("official-");
+}
+
 async function apiPost(payload: Record<string, unknown>) {
   const response = await fetch("/api/community", {
     method: "POST",
@@ -538,7 +548,7 @@ function TimelinePage({ events, onSaved }: { events: TimelineEvent[]; onSaved: (
           <div className="year-marker"><strong>{group.year}</strong><span>{schoolYears[group.year]}</span></div>
           <div className="year-events">{group.events.length ? group.events.map((item) => <article key={item.id} className="timeline-entry">
             <h2>{item.title}</h2><p>{item.body}</p><small>기록: {item.authorName}</small>
-            <div className="entry-actions"><button onClick={() => openEditor(item)}>수정</button><button onClick={() => remove(item)}>삭제</button></div>
+            {!isOfficialEntry(item.id) && <div className="entry-actions"><button onClick={() => openEditor(item)}>수정</button><button onClick={() => remove(item)}>삭제</button></div>}
             <CommentsSection sectionId={`timeline:${item.id}`} />
           </article>) : <p className="empty-year">— 아직 기록 없음 —</p>}</div>
         </section>)}
@@ -577,7 +587,7 @@ function RecordsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () 
     } catch (caught) { setError(caught instanceof Error ? caught.message : "기록을 삭제하지 못했습니다."); }
   }
 
-  if (selected) return <RecordDocument record={selected} onBack={() => setSelected(null)} onDelete={() => remove(selected)} error={error} />;
+  if (selected) return <RecordDocument record={selected} onBack={() => setSelected(null)} onDelete={isOfficialEntry(selected.id) ? undefined : () => remove(selected)} error={error} />;
 
   return (
     <>
@@ -599,19 +609,19 @@ function RecordsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () 
       <div className={`record-card-grid ${filter === "memo" ? "memo-grid" : "diary-grid"}`} aria-label="우리 기록 목록">
         {visible.length ? visible.map((item) => <article className={`record-card ${item.kind}`} key={item.id}>
           <button className="record-card-open" onClick={() => setSelected(item)}>
-            <span>{item.storyDate}</span><strong>{item.title}</strong><p>{item.body.slice(0, 150)}{item.body.length > 150 ? "…" : ""}</p><small>{item.authorName}</small>
+            <span>{storyDateLabel(item.storyDate)}</span><strong>{item.title}</strong><p>{item.body.slice(0, 150)}{item.body.length > 150 ? "…" : ""}</p><small>{item.authorName}</small>
           </button>
-          <button className="record-delete" onClick={() => remove(item)}>[ 삭제 ]</button>
+          {!isOfficialEntry(item.id) && <button className="record-delete" onClick={() => remove(item)}>[ 삭제 ]</button>}
         </article>) : <p className="empty table-empty">이 분류에는 아직 기록이 없어.</p>}
       </div>
     </>
   );
 }
 
-function RecordDocument({ record, onBack, onDelete, error }: { record: RecordItem; onBack: () => void; onDelete: () => void; error: string }) {
+function RecordDocument({ record, onBack, onDelete, error }: { record: RecordItem; onBack: () => void; onDelete?: () => void; error: string }) {
   return <>
-    <div className="document-actions"><button className="back-link" onClick={onBack}>{"<-"} 기록 목록</button><button className="text-button" onClick={onDelete}>[ 기록 삭제 ]</button></div>
-    <SectionTitle eyebrow={`RECORD / ${kindLabels[record.kind]}`} title={record.title} description={`${record.storyDate} / ${record.authorName}`} />
+    <div className="document-actions"><button className="back-link" onClick={onBack}>{"<-"} 기록 목록</button>{onDelete && <button className="text-button" onClick={onDelete}>[ 기록 삭제 ]</button>}</div>
+    <SectionTitle eyebrow={`RECORD / ${kindLabels[record.kind]}`} title={record.title} description={`${storyDateLabel(record.storyDate)} / ${record.authorName}`} />
     <article className="document-body">{record.body.split("\n").map((line, index) => <p key={index}>{line || <>&nbsp;</>}</p>)}</article>
     {error && <p className="form-error standalone">{error}</p>}
     <CommentsSection sectionId={`record:${record.id}`} initiallyOpen />
@@ -827,8 +837,24 @@ function IslandPage() {
   return <>
     <SectionTitle eyebrow="MATAEPEDIA / MATAEDO" title="마태도" description="우리가 사는 섬. 지도에 없는 길이나 어른들이 모르는 장소도 기록한다." />
     <LegacyDocument sectionId="world-map" title="마태도 지도"><img className="legacy-map" src="/legacy/mataedo_map.jpg" alt="마태도 지도" loading="lazy" decoding="async" /><p>사목리와 사목항, 학교, 공소, 괴불림과 마두산까지 표시해 둔 지도야.</p></LegacyDocument>
-    <LegacyDocument sectionId="world-1" title="마태도 기본 정보"><p>마태도는 전라남도 완도 인근에 있는 가상의 섬이야. 행정구역상으로는 마태면 전체를 차지하고 있어.</p><p>면적은 약 38.47㎢, 인구는 약 4천여 명 정도야. 도서관, 체육관, 초중고 교육기관도 있고 말, 콩, 보리, 김, 해조류가 특산물이야.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-1" title="마태도 기본 정보"><p>마태도는 전라남도 완도군 보길도에서 남서쪽으로 약 20km 떨어진 섬이야. 행정구역상으로는 마태면 전체를 차지하고 있어.</p><p>면적은 약 38.47㎢, 인구는 약 4천여 명 정도야. 도서관, 체육관, 초중고 교육기관도 있고 말, 콩, 보리, 김, 해조류가 특산물이야.</p></LegacyDocument>
     <LegacyDocument sectionId="world-2" title="교통 정보"><p>해남에서는 바로 들어오는 배편이 없고, 완도선착장에서 사흘에 한 번 뜨는 배를 타야 해. 사목항까지 약 1시간 30분 걸려.</p><p>섬 안에는 택시나 렌트가 없고 한 시간에 한 번 정도 다니는 마을버스뿐이야.</p></LegacyDocument>
+    <section className="wiki-section"><h2>마태도 일람</h2></section>
+    <LegacyDocument sectionId="world-samokri" title="사목리와 사목항"><p>사목리는 섬 북동쪽의 중심 마을이야. 약 1천 가구가 있고 섬 인구의 절반 이상이 살아. 토박이들은 이곳을 그냥 ‘읍내’라고 부르기도 해.</p><p>사목항은 마태도의 유일한 선착장이자 관광객이 들어오는 관문이야. 배가 매일 다니지 않아서 섬 밖에 나갈 일이 있으면 날짜부터 맞춰야 해.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-samok-facilities" title="사목리 생활시설"><p>면사무소, 경찰서, 도서관, 체육관, 피시방과 작은 가게들이 사목리 생활권에 모여 있어.</p><p>필요한 것은 웬만큼 구할 수 있지만 육지에서 보던 유명 체인점은 거의 없어.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-school" title="마태 초중고등학교"><p>마태도에 하나뿐인 학교야. 초등학교, 중학교, 고등학교가 한 건물에 함께 있고 학생 수가 적어서 서로 얼굴을 거의 다 알아.</p><p>쓰지 않는 교실도 여럿 있어. 밤에는 들어가지 말라는 말이 많지만, 낮에는 운동장과 빈 교실이 아이들 놀이터가 되기도 해.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-office" title="마태면사무소"><p>섬의 행정과 안내 방송을 맡는 곳이야. 도봉남 면장이 일하고 있어.</p><p>해가 진 뒤 비가 올 것 같으면 여기서 귀가하라는 방송이 나와. 이상하게도 실제 비가 내리기 약 5분 전에 들릴 때가 많아.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-gongso" title="완도성당 마태 공소"><p>사목리 동쪽에 있는 큰 공소야. 신부님이 늘 머무는 곳은 아니고, 미사뿐 아니라 마을 행사와 회의, 교리 공부에도 쓰여.</p><p>관리실과 상주 관리인이 있고, 섬 안쪽의 마태오 순교성지와 이어지는 이야기가 많아.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-tourism" title="마태면 관광안내소"><p>사목항에서 내리면 바로 보이는 작은 1층 안내소야. 사목리 약도와 공소, 말총곶, 괴불림, 말 목장, 순교성지의 관광 자료를 구할 수 있어.</p><p>아르바이트생 현우성은 섬길과 관광지에 관해서는 잘 알려 주는 편이야. 마태도의 이상한 소문까지 전부 아는 사람은 아니야.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-creek" title="학교 아래 냇가"><p>학교에서 마을로 내려가는 길 옆에 있는 얕은 냇가야. 평소에는 아이들이 들여다보거나 건너 다니는 평범한 곳이야.</p><p>2011년 어느 날 물이 피처럼 붉게 변한 적이 있어. 왜 그랬는지는 누구도 제대로 설명하지 않았어.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-gwebullim" title="괴불림"><p>마을 바깥에서 마태오 순교성지 쪽으로 이어지는 숲이야. 길이 복잡하고 비가 오면 방향을 잃기 쉬워.</p><p>학교와 면사무소에서는 해가 진 뒤 들어가지 말라고 해. 특히 비 오는 밤에는 가까이 가지 않는 게 마태도의 오래된 규칙이야.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-shrine" title="마태오 순교성지"><p>사목리에서 걸어서 약 20분, 괴불림 안쪽 언덕 너머에 있는 오래된 순교성지야. 한옥 여러 채로 이루어진 관광지지만 사목리에서 바로 이어지는 찻길은 없어.</p><p>마태도의 천주교 역사와 순교자들을 기리는 곳으로 알려져 있어. 낮에도 일부 구역은 들어가지 못하게 막는 때가 있어.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-martyr-story" title="마태도에서 전하는 순교 이야기"><p>관광자료에는 마튜 샤르보노 신부가 1832년 마태도에 정착해 천주교를 전했고, 1842년에 열세 명과 함께 순교했다고 적혀 있어.</p><p>이건 섬과 순교성지가 공식적으로 소개하는 이야기야. 오래된 기록이 전부 남아 있는지는 확인하지 못했어.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-obang-cross" title="오방십자가"><p>보통 십자가보다 조금 크고, 다섯 가지 전통 오방색으로 칠한 십자가야. 마태도 신자들 중에는 이 십자가를 지니고 다니는 사람이 많아.</p><p>천주교 신앙과 섬의 오래된 민간신앙이 섞여 만들어진 마태도만의 물건이라고 알려져 있어.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-duiju" title="집집마다 있는 뒤주"><p>직사각형 나무 상자처럼 생긴 오래된 가구야. 마태도에서는 아직도 거의 모든 집에서 하나씩 볼 수 있어.</p><p>관광자료에는 1842년의 열세 순교자를 기리는 전통이라고 적혀 있어. 사람 한 명이 웅크리고 들어갈 만큼 큰 것도 있고, 낯선 표시가 새겨진 것도 있어.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-horse-ranch" title="말 목장"><p>관광안내도에도 표시되는 지역 명소이자 마태도 특산업의 중심이야. 섬에서는 말을 기르고 파는 일이 오래전부터 이어졌어.</p><p>박해주 부녀회장이 목장주로 알려져 있어.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-lighthouse" title="말총곶과 등대"><p>말총곶은 섬 남쪽으로 말꼬리처럼 길게 뻗은 곶이야. 끝에는 낡은 2층 등대가 있어.</p><p>밤이면 물귀신 노랫소리가 들린다는 괴담이 있지만 직접 확인했다는 사람은 드물어.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-madusan" title="마두산"><p>사목리 남쪽에 있는 큰 산이야. 등산할 수 있지만 특별한 관광 시설은 없어.</p><p>산의 정기를 받으면 시험을 잘 본다는 말이 아이들 사이에서 돌아.</p></LegacyDocument>
     <LegacyDocument sectionId="world-5" title="마태도의 금기"><p className="document-alert">해가 진 뒤 비가 내리는 밤에는 함부로 밖에 나가지 않는 것.</p><p>섬 곳곳에는 “落日沈現律 落水昇藏律”이라는 문구가 적혀 있어. 해가 지면 인간 세상의 율법이 약해지고, 비가 오면 숨겨진 율법이 드러난다는 뜻이라고 해.</p><p>면사무소에서는 밤에 비가 오기 약 5분 전에 경고방송을 해.</p></LegacyDocument>
   </>;
 }
@@ -874,7 +900,7 @@ function RumorsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () =
     {!showForm && error && <p className="form-error standalone">{error}</p>}
     <LegacyDocument sectionId="rumor-1" title="[?] 학교 괴담" year={2011}><p>마태 초중고등학교는 초·중·고가 하나로 묶인 특이한 학교고, 비어 있는 교실도 여럿 있어.</p><p>밤에 몰래 들어갔다 수위 아저씨에게 들키면 큰일 난다는 이야기, 수위 아저씨가 사람을 잡아먹는 커다란 뱀이라는 이야기가 돌아.</p></LegacyDocument>
     <LegacyDocument sectionId="rumor-2" title="[?] 마을 외곽의 이상한 소문" year={2011}><p>말총곶 등대에서는 물귀신 노랫소리가 들리고, 비 오는 밤 괴불림에서는 사람들이 길을 잃는다고 해.</p><p>마두산의 정기를 받으면 중간시험 1등을 한다는 말도 있어.</p></LegacyDocument>
-    <section className="wiki-section"><h2>새로 모인 소문</h2><div className="rumor-list">{records.length ? records.map((item) => <article key={item.id}><span>[?]</span><div><div className="rumor-heading"><h2>{item.title}</h2><time>{item.storyDate.slice(0, 4)}</time></div><p>{item.body}</p><small>{item.authorName}</small><div className="entry-actions"><button onClick={() => remove(item)}>삭제</button></div><CommentsSection sectionId={`record:${item.id}`} /></div></article>) : <div className="empty-box"><strong>새로 등록된 소문 없음</strong><p>위의 ‘소문 남기기’에서 연도를 골라 적어 줘.</p></div>}</div></section>
+    <section className="wiki-section"><h2>새로 모인 소문</h2><div className="rumor-list">{records.length ? records.map((item) => <article key={item.id}><span>[?]</span><div><div className="rumor-heading"><h2>{item.title}</h2><time>{item.storyDate.slice(0, 4)}</time></div><p>{item.body}</p><small>{item.authorName}</small>{!isOfficialEntry(item.id) && <div className="entry-actions"><button onClick={() => remove(item)}>삭제</button></div>}<CommentsSection sectionId={`record:${item.id}`} /></div></article>) : <div className="empty-box"><strong>새로 등록된 소문 없음</strong><p>위의 ‘소문 남기기’에서 연도를 골라 적어 줘.</p></div>}</div></section>
   </>;
 }
 
