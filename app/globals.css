@@ -175,8 +175,8 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .character-grid { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line-dark); border-left: 1px solid var(--line-dark); }
 .character-grid > .empty-box { grid-column: 1 / -1; border-top: 0; border-left: 0; }
 .character-card { min-height: 330px; border-right: 1px solid var(--line-dark); border-bottom: 1px solid var(--line-dark); padding: 22px; display: flex; flex-direction: column; gap: 18px; }
-.character-photo { width: 100%; height: clamp(190px, 24vw, 240px); border: 1px solid var(--line-dark); display: grid; place-items: center; background: var(--paper-light); overflow: hidden; }
-.character-photo img { display: block; width: auto; height: 100%; max-width: 100%; object-fit: contain; filter: none; }
+.character-photo { --character-photo-height: clamp(190px, 24vw, 240px); width: 100%; height: var(--character-photo-height); border: 1px solid var(--line-dark); display: grid; place-items: center; background: var(--paper-light); overflow: hidden; }
+.character-photo img { display: block; width: auto; height: calc(var(--character-photo-height) - 2px); max-width: 100%; object-fit: contain; filter: none; }
 .character-photo span { text-align: center; color: var(--muted); font: .7rem/1.5 "Courier New", monospace; }
 .upload-photo { cursor: pointer; position: relative; }
 .upload-photo:hover::after { content: "이미지 바꾸기"; position: absolute; inset: auto 0 0; padding: 6px; background: var(--inverse); color: var(--paper-light); text-align: center; font: .62rem "Courier New", monospace; }
@@ -324,7 +324,7 @@ input, textarea { caret-color: var(--ink); }
   .comment-form { grid-template-columns: 1fr; }
   .comment-form > * { grid-column: 1; }
   .character-card { min-height: 0; padding: 15px; gap: 15px; }
-  .character-photo { height: clamp(180px, 52vw, 220px); }
+  .character-photo { --character-photo-height: clamp(180px, 52vw, 220px); }
   .room-row { grid-template-columns: 1fr; gap: 10px; }
   .room-status { border-left: 0; border-top: 1px dotted var(--line); padding: 10px 0 0; align-items: flex-start; display: grid; grid-template-columns: auto auto 1fr; gap: 5px; }
   .room-status > div { justify-self: end; }
