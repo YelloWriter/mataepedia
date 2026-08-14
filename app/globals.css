@@ -131,9 +131,12 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .record-card-open strong { font: 700 1.2rem "Courier New", monospace; }
 .record-card-open p { margin: 0; line-height: 1.7; white-space: pre-wrap; }
 .record-card-open small { margin-top: auto; }
-.record-delete { justify-self: end; border: 0; border-top: 1px dotted var(--line); border-left: 1px dotted var(--line); background: transparent; padding: 8px 12px; font: .68rem "Courier New", monospace; text-decoration: underline; }
+.record-card-actions { justify-self: end; display: flex; border-top: 1px dotted var(--line); border-left: 1px dotted var(--line); }
+.record-card-actions button { border: 0; border-right: 1px dotted var(--line); background: transparent; padding: 8px 12px; font: .68rem "Courier New", monospace; text-decoration: underline; }
+.record-card-actions button:last-child { border-right: 0; }
 .document-actions { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
 .document-actions .back-link { margin: 0; }
+.document-actions > div { display: flex; gap: 12px; }
 .records-table { border-top: 2px solid var(--line-dark); }
 .records-head, .records-row { display: grid; grid-template-columns: 120px 90px minmax(0, 1fr) 100px; gap: 12px; align-items: center; width: 100%; text-align: left; padding: 12px 8px; }
 .records-head { border-bottom: 1px solid var(--line-dark); font-size: .66rem; }
@@ -169,6 +172,7 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .replying, .comment-form .form-error { grid-column: 1; }
 .replying button { border: 0; background: none; text-decoration: underline; }
 .character-years { display: grid; gap: 46px; }
+.character-year-tabs { width: max-content; margin-bottom: 26px; }
 .character-year-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; border-bottom: 3px double var(--line-dark); margin-bottom: 16px; }
 .character-year-heading .eyebrow { margin: 0 0 10px; }
 .character-year-heading h2 { margin: 0 0 8px; font-size: 1.8rem; }
@@ -215,8 +219,7 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .definition-list div { display: grid; grid-template-columns: 130px 1fr; padding: 13px 0; border-bottom: 1px dotted var(--line); }
 .definition-list dt { font-weight: 700; }
 .definition-list dd { margin: 0; color: var(--muted); }
-.rumor-list article { display: grid; grid-template-columns: 70px 1fr; gap: 20px; border-bottom: 1px solid var(--line-dark); padding: 24px 0; }
-.rumor-list article > span { font: 2rem "Courier New", monospace; }
+.rumor-list article { border-bottom: 1px solid var(--line-dark); padding: 24px 0; }
 .rumor-list h2 { margin: 0 0 8px; font: 700 1.2rem "Courier New", monospace; }
 .rumor-list p { line-height: 1.7; }
 .rumor-list small { color: var(--muted); font: .68rem "Courier New", monospace; }

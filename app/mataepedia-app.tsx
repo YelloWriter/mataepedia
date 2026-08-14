@@ -548,7 +548,7 @@ function TimelinePage({ events, onSaved }: { events: TimelineEvent[]; onSaved: (
           <div className="year-marker"><strong>{group.year}</strong><span>{schoolYears[group.year]}</span></div>
           <div className="year-events">{group.events.length ? group.events.map((item) => <article key={item.id} className="timeline-entry">
             <h2>{item.title}</h2><p>{item.body}</p><small>기록: {item.authorName}</small>
-            {!isOfficialEntry(item.id) && <div className="entry-actions"><button onClick={() => openEditor(item)}>수정</button><button onClick={() => remove(item)}>삭제</button></div>}
+            <div className="entry-actions"><button onClick={() => openEditor(item)}>수정</button><button onClick={() => remove(item)}>삭제</button></div>
             <CommentsSection sectionId={`timeline:${item.id}`} />
           </article>) : <p className="empty-year">— 아직 기록 없음 —</p>}</div>
         </section>)}
@@ -562,17 +562,26 @@ function RecordsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () 
   const [filter, setFilter] = useState<"diary" | "memo">("diary");
   const [selected, setSelected] = useState<RecordItem | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<RecordItem | null>(null);
   const [error, setError] = useState("");
   const visible = records.filter((item) => item.kind === filter);
+
+  function openEditor(item?: RecordItem) {
+    setEditing(item ?? null);
+    setSelected(null);
+    setShowForm(true);
+    setError("");
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     try {
-      await apiPost({ action: "create-record", kind: form.get("kind"), title: form.get("title"), body: form.get("body"), authorName: form.get("author"), storyDate: form.get("date"), ownerKey: localOwnerKey() });
+      await apiPost({ action: editing ? "update-record" : "create-record", id: editing?.id, kind: form.get("kind"), title: form.get("title"), body: form.get("body"), authorName: form.get("author"), storyDate: form.get("date"), ownerKey: localOwnerKey() });
       formElement.reset();
       setShowForm(false);
+      setEditing(null);
       await onSaved();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "저장하지 못했습니다."); }
   }
@@ -587,23 +596,23 @@ function RecordsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () 
     } catch (caught) { setError(caught instanceof Error ? caught.message : "기록을 삭제하지 못했습니다."); }
   }
 
-  if (selected) return <RecordDocument record={selected} onBack={() => setSelected(null)} onDelete={isOfficialEntry(selected.id) ? undefined : () => remove(selected)} error={error} />;
+  if (selected) return <RecordDocument record={selected} onBack={() => setSelected(null)} onEdit={() => openEditor(selected)} onDelete={() => remove(selected)} error={error} />;
 
   return (
     <>
       <SectionTitle eyebrow="MATAEPEDIA / RECORDS" title="우리 기록" />
       <div className="record-controls">
         <div className="filter-tabs">{(["diary", "memo"] as const).map((key) => <button key={key} className={filter === key ? "active" : ""} onClick={() => setFilter(key)}>{kindLabels[key]}</button>)}</div>
-        <button className="text-button" onClick={() => setShowForm((value) => !value)}>[ + 새 기록 ]</button>
+        <button className="text-button" onClick={() => { if (showForm) { setShowForm(false); setEditing(null); } else { openEditor(); } }}>[ {showForm ? "닫기" : "+ 새 기록"} ]</button>
       </div>
-      {showForm && <form className="editor-box" onSubmit={submit}>
-        <label>분류<select name="kind" defaultValue={filter}><option value="diary">일기</option><option value="memo">메모</option></select></label>
-        <label>극중 날짜<input name="date" type="date" min="2011-01-01" max="2015-12-31" defaultValue="2012-01-01" required /></label>
-        <label>작성자<input name="author" maxLength={24} required /></label>
-        <label className="wide">제목<input name="title" maxLength={100} required /></label>
-        <label className="wide">내용<textarea name="body" maxLength={10000} required /></label>
+      {showForm && <form key={editing?.id ?? "new-record"} className="editor-box" onSubmit={submit}>
+        <label>분류<select name="kind" defaultValue={editing?.kind ?? filter}><option value="diary">일기</option><option value="memo">메모</option></select></label>
+        <label>극중 날짜<input name="date" inputMode="numeric" placeholder="2011-00-00" pattern="20(11|12|13|14|15)-(0[0-9]|1[0-2])-(0[0-9]|[12][0-9]|3[01])" defaultValue={editing?.storyDate ?? "2012-01-01"} maxLength={10} required /></label>
+        <label>작성자<input name="author" defaultValue={editing?.authorName ?? ""} maxLength={24} required /></label>
+        <label className="wide">제목<input name="title" defaultValue={editing?.title ?? ""} maxLength={100} required /></label>
+        <label className="wide">내용<textarea name="body" defaultValue={editing?.body ?? ""} maxLength={10000} required /></label>
         {error && <p className="form-error">{error}</p>}
-        <div className="form-actions"><button type="button" onClick={() => setShowForm(false)}>취소</button><button type="submit">기록 남기기</button></div>
+        <div className="form-actions"><button type="button" onClick={() => { setShowForm(false); setEditing(null); }}>취소</button><button type="submit">{editing ? "수정 저장" : "기록 남기기"}</button></div>
       </form>}
       {!showForm && error && <p className="form-error standalone">{error}</p>}
       <div className={`record-card-grid ${filter === "memo" ? "memo-grid" : "diary-grid"}`} aria-label="우리 기록 목록">
@@ -611,16 +620,16 @@ function RecordsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () 
           <button className="record-card-open" onClick={() => setSelected(item)}>
             <span>{storyDateLabel(item.storyDate)}</span><strong>{item.title}</strong><p>{item.body.slice(0, 150)}{item.body.length > 150 ? "…" : ""}</p><small>{item.authorName}</small>
           </button>
-          {!isOfficialEntry(item.id) && <button className="record-delete" onClick={() => remove(item)}>[ 삭제 ]</button>}
+          <div className="record-card-actions"><button onClick={() => openEditor(item)}>[ 수정 ]</button><button onClick={() => remove(item)}>[ 삭제 ]</button></div>
         </article>) : <p className="empty table-empty">이 분류에는 아직 기록이 없어.</p>}
       </div>
     </>
   );
 }
 
-function RecordDocument({ record, onBack, onDelete, error }: { record: RecordItem; onBack: () => void; onDelete?: () => void; error: string }) {
+function RecordDocument({ record, onBack, onEdit, onDelete, error }: { record: RecordItem; onBack: () => void; onEdit: () => void; onDelete: () => void; error: string }) {
   return <>
-    <div className="document-actions"><button className="back-link" onClick={onBack}>{"<-"} 기록 목록</button>{onDelete && <button className="text-button" onClick={onDelete}>[ 기록 삭제 ]</button>}</div>
+    <div className="document-actions"><button className="back-link" onClick={onBack}>{"<-"} 기록 목록</button><div><button className="text-button" onClick={onEdit}>[ 기록 수정 ]</button><button className="text-button" onClick={onDelete}>[ 기록 삭제 ]</button></div></div>
     <SectionTitle eyebrow={`RECORD / ${kindLabels[record.kind]}`} title={record.title} description={`${storyDateLabel(record.storyDate)} / ${record.authorName}`} />
     <article className="document-body">{record.body.split("\n").map((line, index) => <p key={index}>{line || <>&nbsp;</>}</p>)}</article>
     {error && <p className="form-error standalone">{error}</p>}
@@ -717,6 +726,7 @@ function CommentItem({ comment, onReply, onChanged, onError }: { comment: Commen
 }
 
 function PeoplePage({ characters, onSaved }: { characters: Character[]; onSaved: () => Promise<void> }) {
+  const [activeYear, setActiveYear] = useState<(typeof characterYears)[number]>(2011);
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState("");
   const [draftImage, setDraftImage] = useState<string | null>(null);
@@ -733,34 +743,36 @@ function PeoplePage({ characters, onSaved }: { characters: Character[]; onSaved:
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const storyYear = Number(form.get("year")) as (typeof characterYears)[number];
     try {
-      await apiPost({ action: "save-character", id: `person-${crypto.randomUUID()}`, name: form.get("name"), summary: form.get("summary"), description: form.get("description"), storyYear: Number(form.get("year")), imageDataUrl: draftImage, sortOrder: characters.length, ownerKey: localOwnerKey() });
+      await apiPost({ action: "save-character", id: `person-${crypto.randomUUID()}`, name: form.get("name"), summary: form.get("summary"), description: form.get("description"), storyYear, imageDataUrl: draftImage, sortOrder: characters.length, ownerKey: localOwnerKey() });
       formElement.reset();
       setDraftImage(null);
       setShowAdd(false);
+      setActiveYear(storyYear);
       await onSaved();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "인물을 추가하지 못했습니다."); }
   }
 
+  const activeCharacters = characters.filter((person) => (person.storyYear || 2011) === activeYear);
+
   return <>
     <SectionTitle eyebrow="MATAEPEDIA / PEOPLE" title="인물" description="마태도와 우리 주변 사람들. 누구나 인물을 추가하고, 사진과 설명을 고칠 수 있어." />
     <div className="toolbar"><button className="text-button" onClick={() => setShowAdd((value) => !value)}>[ {showAdd ? "닫기" : "+ 인물 추가"} ]</button></div>
-    {showAdd && <form className="editor-box character-add-form" onSubmit={add}>
+    <div className="filter-tabs character-year-tabs" role="tablist" aria-label="인물 연도"><button className={activeYear === 2011 ? "active" : ""} role="tab" aria-selected={activeYear === 2011} onClick={() => setActiveYear(2011)}>2011년</button><button className={activeYear === 2015 ? "active" : ""} role="tab" aria-selected={activeYear === 2015} onClick={() => setActiveYear(2015)}>2015년</button></div>
+    {showAdd && <form key={`add-${activeYear}`} className="editor-box character-add-form" onSubmit={add}>
       <label>이름<input name="name" maxLength={40} required /></label>
       <label>한 마디<input name="summary" maxLength={120} /></label>
-      <label>극중 연도<select name="year" defaultValue="2011">{characterYears.map((year) => <option key={year}>{year}</option>)}</select></label>
+      <label>극중 연도<select name="year" defaultValue={activeYear}>{characterYears.map((year) => <option key={year}>{year}</option>)}</select></label>
       <div className="character-image-field wide"><span>인물 이미지</span><ImageUploadField imageDataUrl={draftImage} name="새 인물" index={characters.length} onFile={chooseImage} mode="form" /><small>클릭하거나 드래그앤드롭한 뒤 확대·축소하고 크롭할 수 있어.</small></div>
       <label className="wide">인물 설명<textarea name="description" maxLength={6000} required /></label>
       {error && <p className="form-error">{error}</p>}
       <div className="form-actions"><button type="button" onClick={() => setShowAdd(false)}>취소</button><button type="submit">인물 추가</button></div>
     </form>}
-    <div className="character-years">{characterYears.map((year) => {
-      const yearCharacters = characters.filter((person) => (person.storyYear || 2011) === year);
-      return <section className="character-year-section" key={year}>
-        <header className="character-year-heading"><p className="eyebrow">PERSON ARCHIVE / {year}</p><h2>{year}년</h2></header>
-        <div className="character-grid">{yearCharacters.length ? yearCharacters.map((person) => <CharacterCard key={person.id} person={person} index={characters.findIndex((item) => item.id === person.id)} onSaved={onSaved} />) : <div className="empty-box">{year}년에 등록된 인물이 없어.</div>}</div>
-      </section>;
-    })}</div>
+    <div className="character-years"><section className="character-year-section">
+      <header className="character-year-heading"><p className="eyebrow">PERSON ARCHIVE / {activeYear}</p><h2>{activeYear}년</h2></header>
+      <div className="character-grid">{activeCharacters.length ? activeCharacters.map((person) => <CharacterCard key={person.id} person={person} index={characters.findIndex((item) => item.id === person.id)} onSaved={onSaved} />) : <div className="empty-box">{activeYear}년에 등록된 인물이 없어.</div>}</div>
+    </section></div>
     {cropFile && <ImageCropEditor file={cropFile} onCancel={() => setCropFile(null)} onApply={(imageDataUrl) => { setDraftImage(imageDataUrl); setCropFile(null); }} />}
   </>;
 }
@@ -887,7 +899,7 @@ function RumorsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () =
   }
 
   return <>
-    <SectionTitle eyebrow="MATAEPEDIA / RUMORS" title="소문" description="사실인지 아닌지 모르는 이야기. 확인 전에는 문서 앞에 [?]를 붙인다." />
+    <SectionTitle eyebrow="MATAEPEDIA / RUMORS" title="소문" description="사실인지 아닌지 모르는 이야기. 들은 대로 적되 사실이라고 단정하지 말 것." />
     <div className="toolbar"><button className="text-button" onClick={() => setShowForm((value) => !value)}>[ {showForm ? "닫기" : "+ 소문 남기기"} ]</button></div>
     {showForm && <form className="editor-box" onSubmit={submit}>
       <label>극중 연도<select name="year" defaultValue="2011">{storyYears.map((year) => <option key={year}>{year}</option>)}</select></label>
@@ -898,9 +910,9 @@ function RumorsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () =
       <div className="form-actions"><button type="button" onClick={() => setShowForm(false)}>취소</button><button type="submit">소문 남기기</button></div>
     </form>}
     {!showForm && error && <p className="form-error standalone">{error}</p>}
-    <LegacyDocument sectionId="rumor-1" title="[?] 학교 괴담" year={2011}><p>마태 초중고등학교는 초·중·고가 하나로 묶인 특이한 학교고, 비어 있는 교실도 여럿 있어.</p><p>밤에 몰래 들어갔다 수위 아저씨에게 들키면 큰일 난다는 이야기, 수위 아저씨가 사람을 잡아먹는 커다란 뱀이라는 이야기가 돌아.</p></LegacyDocument>
-    <LegacyDocument sectionId="rumor-2" title="[?] 마을 외곽의 이상한 소문" year={2011}><p>말총곶 등대에서는 물귀신 노랫소리가 들리고, 비 오는 밤 괴불림에서는 사람들이 길을 잃는다고 해.</p><p>마두산의 정기를 받으면 중간시험 1등을 한다는 말도 있어.</p></LegacyDocument>
-    <section className="wiki-section"><h2>새로 모인 소문</h2><div className="rumor-list">{records.length ? records.map((item) => <article key={item.id}><span>[?]</span><div><div className="rumor-heading"><h2>{item.title}</h2><time>{item.storyDate.slice(0, 4)}</time></div><p>{item.body}</p><small>{item.authorName}</small>{!isOfficialEntry(item.id) && <div className="entry-actions"><button onClick={() => remove(item)}>삭제</button></div>}<CommentsSection sectionId={`record:${item.id}`} /></div></article>) : <div className="empty-box"><strong>새로 등록된 소문 없음</strong><p>위의 ‘소문 남기기’에서 연도를 골라 적어 줘.</p></div>}</div></section>
+    <LegacyDocument sectionId="rumor-1" title="학교 괴담" year={2011}><p>마태 초중고등학교는 초·중·고가 하나로 묶인 특이한 학교고, 비어 있는 교실도 여럿 있어.</p><p>밤에 몰래 들어갔다 수위 아저씨에게 들키면 큰일 난다는 이야기, 수위 아저씨가 사람을 잡아먹는 커다란 뱀이라는 이야기가 돌아.</p></LegacyDocument>
+    <LegacyDocument sectionId="rumor-2" title="마을 외곽의 이상한 소문" year={2011}><p>말총곶 등대에서는 물귀신 노랫소리가 들리고, 비 오는 밤 괴불림에서는 사람들이 길을 잃는다고 해.</p><p>마두산의 정기를 받으면 중간시험 1등을 한다는 말도 있어.</p></LegacyDocument>
+    <section className="wiki-section"><h2>새로 모인 소문</h2><div className="rumor-list">{records.length ? records.map((item) => <article key={item.id}><div><div className="rumor-heading"><h2>{item.title}</h2><time>{item.storyDate.slice(0, 4)}</time></div><p>{item.body}</p><small>{item.authorName}</small>{!isOfficialEntry(item.id) && <div className="entry-actions"><button onClick={() => remove(item)}>삭제</button></div>}<CommentsSection sectionId={`record:${item.id}`} /></div></article>) : <div className="empty-box"><strong>새로 등록된 소문 없음</strong><p>위의 ‘소문 남기기’에서 연도를 골라 적어 줘.</p></div>}</div></section>
   </>;
 }
 

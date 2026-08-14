@@ -28,7 +28,7 @@ test("server-renders the Mataepedia shell and social metadata", async () => {
 });
 
 test("keeps the public data features, editing controls, and free-tier guardrails in source", async () => {
-  const [page, app, api, css, hosting, packageJson, legacyMigration, cleanupMigration, characterYearMigration, aftermathMigration, migrationJournal] = await Promise.all([
+  const [page, app, api, css, hosting, packageJson, legacyMigration, cleanupMigration, characterYearMigration, aftermathMigration, islandYearsMigration, migrationJournal] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/mataepedia-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/community/route.ts", import.meta.url), "utf8"),
@@ -39,6 +39,7 @@ test("keeps the public data features, editing controls, and free-tier guardrails
     readFile(new URL("../drizzle/0003_remove_test_timeline_event.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0004_chubby_raider.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0005_quovadis_aftermath.sql", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0006_island_years.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8"),
   ]);
 
@@ -53,6 +54,8 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(app, /delete-character/);
   assert.match(app, /delete-room/);
   assert.match(app, /delete-record/);
+  assert.match(app, /update-record/);
+  assert.match(app, /기록 수정/);
   assert.match(app, /\+ 소문 남기기/);
   assert.match(app, /record-card-grid/);
   assert.match(app, /year=\{2011\}/);
@@ -61,6 +64,8 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(app, /ImageCropEditor/);
   assert.match(app, /SFX \{enabled \? "ON" : "OFF"\}/);
   assert.match(app, /한 마디/);
+  assert.match(app, /aria-label="인물 연도"/);
+  assert.match(app, /aria-selected=\{activeYear === 2011\}/);
   assert.match(app, /visibleYears = tab === "active" \? \[2015\] : \[2011, 2012, 2013, 2014\]/);
   assert.match(app, /defaultValue="2015"/);
   assert.match(app, /system-message/);
@@ -87,6 +92,7 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.doesNotMatch(app, /생각해서 남기는 글/);
   assert.doesNotMatch(app, /사건 댓글/);
   assert.doesNotMatch(app, /\$\{person\.name\} 댓글/);
+  assert.doesNotMatch(app, /\[\?\]/);
   assert.match(api, /messages:\s*20_000/);
   assert.match(api, /messagesPerRoom:\s*5_000/);
   assert.match(api, /WITH RECURSIVE descendants/);
@@ -94,6 +100,9 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(api, /님이 입장하셨습니다\./);
   assert.match(api, /님이 퇴장하셨습니다\./);
   assert.match(api, /author_name, body\) VALUES \(\?1, \?2, 'SYSTEM', \?3\)/);
+  assert.match(api, /action === "update-record"/);
+  assert.match(api, /id\.startsWith\("official-record-"\)/);
+  assert.match(api, /id\.startsWith\("official-event-"\)/);
   assert.match(css, /Pretendard Variable/);
   assert.match(css, /\.character-photo img[^}]*filter: none/);
   assert.match(css, /\.character-photo img[^}]*object-fit: contain/);
@@ -101,6 +110,7 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(css, /\.character-photo \{[^}]*--character-photo-height: clamp\(/);
   assert.match(css, /\.chat-year-groups/);
   assert.match(css, /\.comment-form[^}]*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(css, /\.character-year-tabs/);
   assert.equal((legacyMigration.match(/INSERT OR IGNORE INTO comments/g) ?? []).length, 64);
   assert.equal((legacyMigration.match(/INSERT OR IGNORE INTO characters/g) ?? []).length, 11);
   assert.match(cleanupMigration, /title = '테스트할게\.'/);
@@ -114,6 +124,14 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(aftermathMigration, /돌아온 아이/);
   assert.match(aftermathMigration, /육지의 학교로 전학 갔다/);
   assert.match(migrationJournal, /0005_quovadis_aftermath/);
+  assert.equal((islandYearsMigration.match(/INSERT OR IGNORE INTO records/g) ?? []).length, 3);
+  assert.equal((islandYearsMigration.match(/INSERT OR IGNORE INTO timeline_events/g) ?? []).length, 4);
+  assert.match(islandYearsMigration, /등대지기 아저씨의 실종/);
+  assert.match(islandYearsMigration, /경찰들의 침묵/);
+  assert.match(islandYearsMigration, /그 이후의 평범한 날들/);
+  assert.match(islandYearsMigration, /사목항에 돌고래가 들어온 날/);
+  assert.match(islandYearsMigration, /마태피아를 다시 연 날/);
+  assert.match(migrationJournal, /0006_island_years/);
   assert.match(hosting, /"d1": "DB"/);
   assert.match(hosting, /"r2": null/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);

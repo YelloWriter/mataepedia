@@ -342,6 +342,38 @@ export async function POST(request: Request) {
       return response({ id }, 201);
     }
 
+    if (action === "update-record") {
+      const id = text(payload.id, 80);
+      const kind = text(payload.kind, 20);
+      const title = text(payload.title, 100);
+      const body = text(payload.body, 10_000);
+      const authorName = text(payload.authorName, 24);
+      const storyDate = text(payload.storyDate, 10);
+      const ownerKey = text(payload.ownerKey, 200);
+      if (!id || !["diary", "memo"].includes(kind) || !title || !body || !authorName || !storyDate || !ownerKey) {
+        return fail("수정할 기록의 내용을 모두 입력해 주세요.");
+      }
+      const record = await db
+        .prepare("SELECT kind, owner_key_hash AS ownerKeyHash FROM records WHERE id = ?1")
+        .bind(id)
+        .first<{ kind: string; ownerKeyHash: string }>();
+      if (!record) return fail("존재하지 않는 기록입니다.", 404);
+      if (!["diary", "memo"].includes(record.kind)) return fail("우리 기록의 일기와 메모만 수정할 수 있어.", 403);
+      if (!id.startsWith("official-record-") && record.ownerKeyHash !== await ownerHash(ownerKey)) {
+        return fail("이 브라우저에서 쓴 기록만 수정할 수 있어.", 403);
+      }
+      await db
+        .prepare(
+          `UPDATE records
+           SET kind = ?2, title = ?3, body = ?4, author_name = ?5,
+               story_date = ?6, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?1`,
+        )
+        .bind(id, kind, title, body, authorName, storyDate)
+        .run();
+      return response({ ok: true });
+    }
+
     if (action === "delete-record") {
       const id = text(payload.id, 80);
       const ownerKey = text(payload.ownerKey, 200);
@@ -351,7 +383,9 @@ export async function POST(request: Request) {
         .bind(id)
         .first<{ ownerKeyHash: string }>();
       if (!record) return fail("존재하지 않는 기록입니다.", 404);
-      if (record.ownerKeyHash !== await ownerHash(ownerKey)) return fail("이 브라우저에서 쓴 기록만 삭제할 수 있어.", 403);
+      if (!id.startsWith("official-record-") && record.ownerKeyHash !== await ownerHash(ownerKey)) {
+        return fail("이 브라우저에서 쓴 기록만 삭제할 수 있어.", 403);
+      }
       await db.batch([
         db.prepare("DELETE FROM comments WHERE section_id = ?1").bind(`record:${id}`),
         db.prepare("DELETE FROM records WHERE id = ?1").bind(id),
@@ -469,7 +503,9 @@ export async function POST(request: Request) {
         .bind(id)
         .first<{ ownerKeyHash: string }>();
       if (!event) return fail("존재하지 않는 사건입니다.", 404);
-      if (event.ownerKeyHash !== await ownerHash(ownerKey)) return fail("이 브라우저에서 만든 사건만 수정할 수 있어.", 403);
+      if (!id.startsWith("official-event-") && event.ownerKeyHash !== await ownerHash(ownerKey)) {
+        return fail("이 브라우저에서 만든 사건만 수정할 수 있어.", 403);
+      }
       await db
         .prepare(
           `UPDATE timeline_events
@@ -490,7 +526,9 @@ export async function POST(request: Request) {
         .bind(id)
         .first<{ ownerKeyHash: string }>();
       if (!event) return fail("존재하지 않는 사건입니다.", 404);
-      if (event.ownerKeyHash !== await ownerHash(ownerKey)) return fail("이 브라우저에서 만든 사건만 삭제할 수 있어.", 403);
+      if (!id.startsWith("official-event-") && event.ownerKeyHash !== await ownerHash(ownerKey)) {
+        return fail("이 브라우저에서 만든 사건만 삭제할 수 있어.", 403);
+      }
       await db.batch([
         db.prepare("DELETE FROM comments WHERE section_id = ?1").bind(`timeline:${id}`),
         db.prepare("DELETE FROM timeline_events WHERE id = ?1").bind(id),

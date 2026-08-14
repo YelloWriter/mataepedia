@@ -43,6 +43,13 @@
       "when": 1786689900000,
       "tag": "0005_quovadis_aftermath",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1786691700000,
+      "tag": "0006_island_years",
+      "breakpoints": true
     }
   ]
 }
