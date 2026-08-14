@@ -79,7 +79,7 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(css, /Pretendard Variable/);
   assert.match(css, /\.character-photo img[^}]*filter: none/);
   assert.match(css, /\.character-photo img[^}]*object-fit: contain/);
-  assert.match(css, /\.character-photo img[^}]*width: auto[^}]*height: auto/);
+  assert.match(css, /\.character-photo img[^}]*width: auto[^}]*height: 100%/);
   assert.match(css, /\.character-photo \{[^}]*height: clamp\(/);
   assert.match(css, /\.chat-year-groups/);
   assert.match(css, /\.comment-form[^}]*grid-template-columns: minmax\(0, 1fr\)/);
