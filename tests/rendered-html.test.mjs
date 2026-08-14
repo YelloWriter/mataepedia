@@ -28,7 +28,7 @@ test("server-renders the Mataepedia shell and social metadata", async () => {
 });
 
 test("keeps the public data features, editing controls, and free-tier guardrails in source", async () => {
-  const [page, app, api, css, hosting, packageJson, legacyMigration, cleanupMigration, characterYearMigration, aftermathMigration, islandYearsMigration, migrationJournal] = await Promise.all([
+  const [page, app, api, css, hosting, packageJson, legacyMigration, cleanupMigration, characterYearMigration, aftermathMigration, islandYearsMigration, editableRumorsMigration, migrationJournal] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/mataepedia-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/community/route.ts", import.meta.url), "utf8"),
@@ -40,6 +40,7 @@ test("keeps the public data features, editing controls, and free-tier guardrails
     readFile(new URL("../drizzle/0004_chubby_raider.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0005_quovadis_aftermath.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0006_island_years.sql", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0007_editable_rumors.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8"),
   ]);
 
@@ -56,9 +57,11 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(app, /delete-record/);
   assert.match(app, /update-record/);
   assert.match(app, /기록 수정/);
+  assert.match(app, /guestbook-actions/);
+  assert.match(app, /소문 목록/);
+  assert.match(app, /recordCommentSectionId/);
   assert.match(app, /\+ 소문 남기기/);
   assert.match(app, /record-card-grid/);
-  assert.match(app, /year=\{2011\}/);
   assert.match(app, /초등학교 3학년/);
   assert.match(app, /중학교 1학년/);
   assert.match(app, /ImageCropEditor/);
@@ -69,10 +72,12 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(app, /visibleYears = tab === "active" \? \[2015\] : \[2011, 2012, 2013, 2014\]/);
   assert.match(app, /defaultValue="2015"/);
   assert.match(app, /system-message/);
+  assert.doesNotMatch(app, /shortDate\(message\.createdAt\)/);
   assert.match(app, /navigator\.sendBeacon/);
+  assert.match(app, /announce: false/);
+  assert.match(app, /leave\(false, false\)/);
   assert.match(app, /storyDateLabel/);
   assert.match(app, /날짜 불명/);
-  assert.match(app, /isOfficialEntry/);
   assert.match(app, /마태도 일람/);
   assert.match(app, /사목리와 사목항/);
   assert.match(app, /마태 초중고등학교/);
@@ -93,16 +98,23 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.doesNotMatch(app, /사건 댓글/);
   assert.doesNotMatch(app, /\$\{person\.name\} 댓글/);
   assert.doesNotMatch(app, /\[\?\]/);
+  assert.doesNotMatch(app, /LegacyDocument sectionId="rumor-[12]"/);
   assert.match(api, /messages:\s*20_000/);
   assert.match(api, /messagesPerRoom:\s*5_000/);
   assert.match(api, /WITH RECURSIVE descendants/);
   assert.match(api, /story_year AS storyYear/);
   assert.match(api, /님이 입장하셨습니다\./);
   assert.match(api, /님이 퇴장하셨습니다\./);
+  assert.match(api, /const announce = payload\.announce === true/);
+  assert.match(api, /announce && await hasMessageCapacity/);
   assert.match(api, /author_name, body\) VALUES \(\?1, \?2, 'SYSTEM', \?3\)/);
   assert.match(api, /action === "update-record"/);
-  assert.match(api, /id\.startsWith\("official-record-"\)/);
-  assert.match(api, /id\.startsWith\("official-event-"\)/);
+  assert.match(api, /\["diary", "memo", "guestbook", "rumor"\]/);
+  assert.match(api, /DELETE FROM comments WHERE section_id = \?1 OR section_id = \?2/);
+  assert.doesNotMatch(api, /id\.startsWith\("official-record-"\)/);
+  assert.doesNotMatch(api, /id\.startsWith\("official-event-"\)/);
+  assert.doesNotMatch(api, /이 브라우저에서 쓴 기록만/);
+  assert.doesNotMatch(api, /이 브라우저에서 만든 사건만/);
   assert.match(css, /Pretendard Variable/);
   assert.match(css, /\.character-photo img[^}]*filter: none/);
   assert.match(css, /\.character-photo img[^}]*object-fit: contain/);
@@ -111,6 +123,7 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(css, /\.chat-year-groups/);
   assert.match(css, /\.comment-form[^}]*grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(css, /\.character-year-tabs/);
+  assert.match(css, /\.guestbook-actions/);
   assert.equal((legacyMigration.match(/INSERT OR IGNORE INTO comments/g) ?? []).length, 64);
   assert.equal((legacyMigration.match(/INSERT OR IGNORE INTO characters/g) ?? []).length, 11);
   assert.match(cleanupMigration, /title = '테스트할게\.'/);
@@ -132,6 +145,11 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(islandYearsMigration, /사목항에 돌고래가 들어온 날/);
   assert.match(islandYearsMigration, /마태피아를 다시 연 날/);
   assert.match(migrationJournal, /0006_island_years/);
+  assert.equal((editableRumorsMigration.match(/INSERT OR IGNORE INTO records/g) ?? []).length, 2);
+  assert.match(editableRumorsMigration, /'rumor-1'/);
+  assert.match(editableRumorsMigration, /학교 괴담/);
+  assert.match(editableRumorsMigration, /마을 외곽의 이상한 소문/);
+  assert.match(migrationJournal, /0007_editable_rumors/);
   assert.match(hosting, /"d1": "DB"/);
   assert.match(hosting, /"r2": null/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);

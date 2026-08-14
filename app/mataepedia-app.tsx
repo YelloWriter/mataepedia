@@ -306,8 +306,8 @@ function storyDateLabel(value: string) {
   return value;
 }
 
-function isOfficialEntry(id: string) {
-  return id.startsWith("official-");
+function recordCommentSectionId(id: string) {
+  return id === "rumor-1" || id === "rumor-2" ? id : `record:${id}`;
 }
 
 async function apiPost(payload: Record<string, unknown>) {
@@ -423,7 +423,9 @@ export function MataepediaApp() {
 }
 
 function HomePage({ go, rooms, records, onSaved }: { go: (page: PageKey) => void; rooms: Room[]; records: RecordItem[]; onSaved: () => Promise<void> }) {
+  const confirmDelete = useSiteConfirm();
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState<RecordItem | null>(null);
   const guestbook = records.filter((item) => item.kind === "guestbook");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -435,7 +437,8 @@ function HomePage({ go, rooms, records, onSaved }: { go: (page: PageKey) => void
     setError("");
     try {
       await apiPost({
-        action: "create-record",
+        action: editing ? "update-record" : "create-record",
+        id: editing?.id,
         kind: "guestbook",
         title: `방명록 — ${author}`,
         body,
@@ -444,10 +447,21 @@ function HomePage({ go, rooms, records, onSaved }: { go: (page: PageKey) => void
         ownerKey: localOwnerKey(),
       });
       formElement.reset();
+      setEditing(null);
       await onSaved();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "방명록을 남기지 못했습니다.");
     }
+  }
+
+  async function remove(item: RecordItem) {
+    if (!(await confirmDelete(`‘${item.authorName}’ 방명록을 삭제할까?`))) return;
+    setError("");
+    try {
+      await apiPost({ action: "delete-record", id: item.id });
+      if (editing?.id === item.id) setEditing(null);
+      await onSaved();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "방명록을 삭제하지 못했습니다."); }
   }
 
   return (
@@ -469,15 +483,15 @@ function HomePage({ go, rooms, records, onSaved }: { go: (page: PageKey) => void
       </section>
       <section className="guestbook-section">
         <div className="guestbook-title"><h2>방명록 / GUESTBOOK</h2><span>한 줄만 남길 것</span></div>
-        <form className="guestbook-form" onSubmit={submit}>
-          <label>날짜<input name="date" inputMode="numeric" placeholder="2012/03/14" pattern="20(11|12|13|14|15)/(0[1-9]|1[0-2])/(0[1-9]|[12][0-9]|3[01])" maxLength={10} required /></label>
-          <label>이름<input name="author" maxLength={24} placeholder="닉네임" required /></label>
-          <label className="guestbook-line">한 줄<input name="body" maxLength={160} placeholder="왔다 간 흔적" required /></label>
-          <button type="submit">남기기</button>
+        <form key={editing?.id ?? "new-guestbook"} className="guestbook-form" onSubmit={submit}>
+          <label>날짜<input name="date" inputMode="numeric" placeholder="2012/03/14" pattern="20(11|12|13|14|15)/(0[1-9]|1[0-2])/(0[1-9]|[12][0-9]|3[01])" defaultValue={editing?.storyDate ?? ""} maxLength={10} required /></label>
+          <label>이름<input name="author" defaultValue={editing?.authorName ?? ""} maxLength={24} placeholder="닉네임" required /></label>
+          <label className="guestbook-line">한 줄<input name="body" defaultValue={editing?.body ?? ""} maxLength={160} placeholder="왔다 간 흔적" required /></label>
+          <div className="guestbook-form-actions">{editing && <button type="button" onClick={() => setEditing(null)}>취소</button>}<button type="submit">{editing ? "수정 저장" : "남기기"}</button></div>
           {error && <p className="form-error">{error}</p>}
         </form>
         <div className="guestbook-list">
-          {guestbook.length ? guestbook.slice(0, 30).map((item) => <article key={item.id}><time>{item.storyDate}</time><p>{item.body}</p><strong>{item.authorName}</strong></article>) : <p className="empty">아직 방명록이 비어 있어.</p>}
+          {guestbook.length ? guestbook.slice(0, 30).map((item) => <article key={item.id}><time>{item.storyDate}</time><p>{item.body}</p><strong>{item.authorName}</strong><div className="guestbook-actions"><button onClick={() => setEditing(item)}>수정</button><button onClick={() => remove(item)}>삭제</button></div></article>) : <p className="empty">아직 방명록이 비어 있어.</p>}
         </div>
       </section>
     </>
@@ -874,17 +888,27 @@ function IslandPage() {
 function RumorsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () => Promise<void> }) {
   const confirmDelete = useSiteConfirm();
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<RecordItem | null>(null);
   const [error, setError] = useState("");
+
+  function openEditor(item?: RecordItem) {
+    setEditing(item ?? null);
+    setShowForm(true);
+    setError("");
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const year = String(form.get("year") ?? "2011");
+    const storyDate = editing ? `${year}${editing.storyDate.slice(4)}` : `${year}-01-01`;
     setError("");
     try {
-      await apiPost({ action: "create-record", kind: "rumor", title: form.get("title"), body: form.get("body"), authorName: form.get("author"), storyDate: `${form.get("year")}-01-01`, ownerKey: localOwnerKey() });
+      await apiPost({ action: editing ? "update-record" : "create-record", id: editing?.id, kind: "rumor", title: form.get("title"), body: form.get("body"), authorName: form.get("author"), storyDate, ownerKey: localOwnerKey() });
       formElement.reset();
       setShowForm(false);
+      setEditing(null);
       await onSaved();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "소문을 남기지 못했습니다."); }
   }
@@ -893,26 +917,25 @@ function RumorsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () =
     if (!(await confirmDelete(`‘${item.title}’ 소문과 댓글을 삭제할까?`))) return;
     setError("");
     try {
-      await apiPost({ action: "delete-record", id: item.id, ownerKey: localOwnerKey() });
+      await apiPost({ action: "delete-record", id: item.id });
+      if (editing?.id === item.id) { setEditing(null); setShowForm(false); }
       await onSaved();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "소문을 삭제하지 못했습니다."); }
   }
 
   return <>
     <SectionTitle eyebrow="MATAEPEDIA / RUMORS" title="소문" description="사실인지 아닌지 모르는 이야기. 들은 대로 적되 사실이라고 단정하지 말 것." />
-    <div className="toolbar"><button className="text-button" onClick={() => setShowForm((value) => !value)}>[ {showForm ? "닫기" : "+ 소문 남기기"} ]</button></div>
-    {showForm && <form className="editor-box" onSubmit={submit}>
-      <label>극중 연도<select name="year" defaultValue="2011">{storyYears.map((year) => <option key={year}>{year}</option>)}</select></label>
-      <label>작성자<input name="author" maxLength={24} required /></label>
-      <label className="wide">소문 제목<input name="title" maxLength={100} required /></label>
-      <label className="wide">소문 내용<textarea name="body" maxLength={10000} required /></label>
+    <div className="toolbar"><button className="text-button" onClick={() => { if (showForm) { setShowForm(false); setEditing(null); } else { openEditor(); } }}>[ {showForm ? "닫기" : "+ 소문 남기기"} ]</button></div>
+    {showForm && <form key={editing?.id ?? "new-rumor"} className="editor-box" onSubmit={submit}>
+      <label>극중 연도<select name="year" defaultValue={editing?.storyDate.slice(0, 4) ?? "2011"}>{storyYears.map((year) => <option key={year}>{year}</option>)}</select></label>
+      <label>작성자<input name="author" defaultValue={editing?.authorName ?? ""} maxLength={24} required /></label>
+      <label className="wide">소문 제목<input name="title" defaultValue={editing?.title ?? ""} maxLength={100} required /></label>
+      <label className="wide">소문 내용<textarea name="body" defaultValue={editing?.body ?? ""} maxLength={10000} required /></label>
       {error && <p className="form-error">{error}</p>}
-      <div className="form-actions"><button type="button" onClick={() => setShowForm(false)}>취소</button><button type="submit">소문 남기기</button></div>
+      <div className="form-actions"><button type="button" onClick={() => { setShowForm(false); setEditing(null); }}>취소</button><button type="submit">{editing ? "수정 저장" : "소문 남기기"}</button></div>
     </form>}
     {!showForm && error && <p className="form-error standalone">{error}</p>}
-    <LegacyDocument sectionId="rumor-1" title="학교 괴담" year={2011}><p>마태 초중고등학교는 초·중·고가 하나로 묶인 특이한 학교고, 비어 있는 교실도 여럿 있어.</p><p>밤에 몰래 들어갔다 수위 아저씨에게 들키면 큰일 난다는 이야기, 수위 아저씨가 사람을 잡아먹는 커다란 뱀이라는 이야기가 돌아.</p></LegacyDocument>
-    <LegacyDocument sectionId="rumor-2" title="마을 외곽의 이상한 소문" year={2011}><p>말총곶 등대에서는 물귀신 노랫소리가 들리고, 비 오는 밤 괴불림에서는 사람들이 길을 잃는다고 해.</p><p>마두산의 정기를 받으면 중간시험 1등을 한다는 말도 있어.</p></LegacyDocument>
-    <section className="wiki-section"><h2>새로 모인 소문</h2><div className="rumor-list">{records.length ? records.map((item) => <article key={item.id}><div><div className="rumor-heading"><h2>{item.title}</h2><time>{item.storyDate.slice(0, 4)}</time></div><p>{item.body}</p><small>{item.authorName}</small>{!isOfficialEntry(item.id) && <div className="entry-actions"><button onClick={() => remove(item)}>삭제</button></div>}<CommentsSection sectionId={`record:${item.id}`} /></div></article>) : <div className="empty-box"><strong>새로 등록된 소문 없음</strong><p>위의 ‘소문 남기기’에서 연도를 골라 적어 줘.</p></div>}</div></section>
+    <section className="wiki-section"><h2>소문 목록</h2><div className="rumor-list">{records.length ? records.map((item) => <article key={item.id}><div><div className="rumor-heading"><h2>{item.title}</h2><time>{item.storyDate.slice(0, 4)}</time></div><p>{item.body}</p><small>{item.authorName}</small><div className="entry-actions"><button onClick={() => openEditor(item)}>수정</button><button onClick={() => remove(item)}>삭제</button></div><CommentsSection sectionId={recordCommentSectionId(item.id)} /></div></article>) : <div className="empty-box"><strong>등록된 소문 없음</strong><p>위의 ‘소문 남기기’에서 연도를 골라 적어 줘.</p></div>}</div></section>
   </>;
 }
 
@@ -1007,7 +1030,7 @@ function ChatRoom({ room, onBack }: { room: Room; onBack: () => void }) {
     if (!joined) return;
     return () => {
       if (!sessionId.current) return;
-      const data = new Blob([JSON.stringify({ action: "leave-room", sessionId: sessionId.current })], { type: "application/json" });
+      const data = new Blob([JSON.stringify({ action: "leave-room", sessionId: sessionId.current, announce: false })], { type: "application/json" });
       navigator.sendBeacon("/api/community", data);
     };
   }, [joined]);
@@ -1020,12 +1043,12 @@ function ChatRoom({ room, onBack }: { room: Room; onBack: () => void }) {
     catch (caught) { setError(caught instanceof Error ? caught.message : "입장하지 못했습니다."); }
   }
 
-  async function leave(refresh = true) {
-    await apiPost({ action: "leave-room", sessionId: sessionId.current }).catch(() => undefined); setJoined(false); setDisplayName(""); if (refresh) await load();
+  async function leave(refresh = true, announce = true) {
+    await apiPost({ action: "leave-room", sessionId: sessionId.current, announce }).catch(() => undefined); setJoined(false); setDisplayName(""); if (refresh) await load();
   }
 
   async function backToList() {
-    if (joined) await leave(false);
+    if (joined) await leave(false, false);
     onBack();
   }
 
@@ -1041,7 +1064,7 @@ function ChatRoom({ room, onBack }: { room: Room; onBack: () => void }) {
     <button className="back-link" onClick={backToList}>{"<-"} 채팅방 목록</button>
     <SectionTitle eyebrow={`CHAT LOG / ${room.storyYear}`} title={room.title} description={room.description || "이 방에는 설명이 없어."} />
     <div className="online-strip"><span>ONLINE {online.length.toString().padStart(2, "0")}</span><p>{online.length ? online.map((person) => person.displayName).join(" / ") : "현재 입장한 사람 없음"}</p></div>
-    <div className="chat-log" aria-live="polite">{messages.length ? messages.map((message) => <article key={message.id} className={message.authorName === "SYSTEM" ? "system-message" : ""}><header><strong>{message.authorName === "SYSTEM" ? "SYSTEM" : message.authorName}</strong><time>{shortDate(message.createdAt)}</time></header><p>{message.body}</p></article>) : <p className="empty-log">— 아직 남은 대화가 없어 —</p>}<div ref={logEnd} /></div>
+    <div className="chat-log" aria-live="polite">{messages.length ? messages.map((message) => <article key={message.id} className={message.authorName === "SYSTEM" ? "system-message" : ""}><header><strong>{message.authorName === "SYSTEM" ? "SYSTEM" : message.authorName}</strong></header><p>{message.body}</p></article>) : <p className="empty-log">— 아직 남은 대화가 없어 —</p>}<div ref={logEnd} /></div>
     {room.status === "closed" ? <div className="closed-room">이 방은 닫혔어. 기록만 볼 수 있어.</div> : joined ? <form className="message-form" onSubmit={send}><span>{displayName} &gt;</span><input name="message" aria-label="채팅 메시지" maxLength={1000} autoComplete="off" required /><button type="submit">전송</button><button type="button" onClick={() => leave()}>퇴장하기</button></form> : <div className="join-panel"><p>지금은 대화기록 보기 상태야. ONLINE에는 표시되지 않아.</p><button className="primary-retro" onClick={() => setShowJoin(true)}>입장하기</button></div>}
     {showJoin && <div className="modal-backdrop" role="presentation"><form className="modal" onSubmit={join}><p className="eyebrow">ENTER CHATROOM</p><h2>채팅방에 들어갈 이름</h2><input name="name" maxLength={24} required />{error && <p className="form-error">{error}</p>}<div className="form-actions"><button type="button" onClick={() => setShowJoin(false)}>취소</button><button type="submit">입장</button></div></form></div>}
     {error && !showJoin && <p className="form-error standalone">{error}</p>}
