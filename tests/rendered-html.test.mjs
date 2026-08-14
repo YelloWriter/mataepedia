@@ -28,7 +28,7 @@ test("server-renders the Mataepedia shell and social metadata", async () => {
 });
 
 test("keeps the public data features, editing controls, and free-tier guardrails in source", async () => {
-  const [page, app, api, css, hosting, packageJson, legacyMigration, cleanupMigration, characterYearMigration, aftermathMigration, islandYearsMigration, editableRumorsMigration, migrationJournal] = await Promise.all([
+  const [page, app, api, css, hosting, packageJson, legacyMigration, cleanupMigration, characterYearMigration, aftermathMigration, islandYearsMigration, editableRumorsMigration, noticeMigration, migrationJournal] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/mataepedia-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/community/route.ts", import.meta.url), "utf8"),
@@ -41,6 +41,7 @@ test("keeps the public data features, editing controls, and free-tier guardrails
     readFile(new URL("../drizzle/0005_quovadis_aftermath.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0006_island_years.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0007_editable_rumors.sql", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0008_bumpy_famine.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8"),
   ]);
 
@@ -56,6 +57,9 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(app, /delete-room/);
   assert.match(app, /delete-record/);
   assert.match(app, /update-record/);
+  assert.match(app, /update-notice/);
+  assert.match(app, /notice-edit-form/);
+  assert.match(app, /수정 저장/);
   assert.match(app, /기록 수정/);
   assert.match(app, /guestbook-actions/);
   assert.match(app, /소문 목록/);
@@ -109,6 +113,9 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(api, /announce && await hasMessageCapacity/);
   assert.match(api, /author_name, body\) VALUES \(\?1, \?2, 'SYSTEM', \?3\)/);
   assert.match(api, /action === "update-record"/);
+  assert.match(api, /action === "update-notice"/);
+  assert.match(api, /INSERT INTO site_settings/);
+  assert.match(api, /ON CONFLICT\(key\) DO UPDATE/);
   assert.match(api, /\["diary", "memo", "guestbook", "rumor"\]/);
   assert.match(api, /DELETE FROM comments WHERE section_id = \?1 OR section_id = \?2/);
   assert.doesNotMatch(api, /id\.startsWith\("official-record-"\)/);
@@ -148,6 +155,10 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.equal((editableRumorsMigration.match(/INSERT OR IGNORE INTO records/g) ?? []).length, 2);
   assert.match(editableRumorsMigration, /'rumor-1'/);
   assert.match(editableRumorsMigration, /학교 괴담/);
+  assert.match(noticeMigration, /CREATE TABLE `site_settings`/);
+  assert.match(noticeMigration, /'home_notice'/);
+  assert.match(noticeMigration, /선생님들이랑 마을 사람들에게는 들키지 말자, 우리\./);
+  assert.match(migrationJournal, /0008_bumpy_famine/);
   assert.match(editableRumorsMigration, /마을 외곽의 이상한 소문/);
   assert.match(migrationJournal, /0007_editable_rumors/);
   assert.match(hosting, /"d1": "DB"/);

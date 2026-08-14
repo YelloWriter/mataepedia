@@ -57,6 +57,13 @@
       "when": 1786692600000,
       "tag": "0007_editable_rumors",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786693540441,
+      "tag": "0008_bumpy_famine",
+      "breakpoints": true
     }
   ]
 }

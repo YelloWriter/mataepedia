@@ -44,6 +44,7 @@ type Comment = {
   createdAt: string;
   updatedAt: string;
 };
+type SiteNotice = { body: string; updatedAt: string };
 
 const pages: { key: PageKey; label: string; code: string }[] = [
   { key: "home", label: "대문", code: "00" },
@@ -338,6 +339,7 @@ export function MataepediaApp() {
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [characters, setCharacters] = useState<Character[]>([]);
+  const [siteNotice, setSiteNotice] = useState<SiteNotice | null>(null);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
 
@@ -350,6 +352,7 @@ export function MataepediaApp() {
       setRecords(data.records ?? []);
       setEvents(data.timelineEvents ?? []);
       setCharacters(data.characters ?? []);
+      setSiteNotice(data.siteNotice ?? null);
       setNotice("");
     } catch {
       setNotice("자료를 불러오지 못했어. 잠시 뒤 다시 확인해 줘.");
@@ -404,7 +407,7 @@ export function MataepediaApp() {
         <main className="content" id="main-content" key={page}>
           {notice && <div className="notice-line">{notice}</div>}
           {loading ? <div className="terminal-loading">자료 불러오는 중<span>_</span></div> : null}
-          {!loading && page === "home" && <HomePage go={go} rooms={rooms} records={records} onSaved={refresh} />}
+          {!loading && page === "home" && <HomePage go={go} rooms={rooms} records={records} siteNotice={siteNotice} onSaved={refresh} />}
           {!loading && page === "timeline" && <TimelinePage events={events} onSaved={refresh} />}
           {!loading && page === "records" && <RecordsPage records={records} onSaved={refresh} />}
           {!loading && page === "people" && <PeoplePage characters={characters} onSaved={refresh} />}
@@ -422,11 +425,27 @@ export function MataepediaApp() {
   );
 }
 
-function HomePage({ go, rooms, records, onSaved }: { go: (page: PageKey) => void; rooms: Room[]; records: RecordItem[]; onSaved: () => Promise<void> }) {
+function HomePage({ go, rooms, records, siteNotice, onSaved }: { go: (page: PageKey) => void; rooms: Room[]; records: RecordItem[]; siteNotice: SiteNotice | null; onSaved: () => Promise<void> }) {
   const confirmDelete = useSiteConfirm();
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<RecordItem | null>(null);
+  const [editingNotice, setEditingNotice] = useState(false);
+  const [noticeError, setNoticeError] = useState("");
   const guestbook = records.filter((item) => item.kind === "guestbook");
+  const noticeBody = siteNotice?.body ?? "선생님들이랑 마을 사람들에게는 들키지 말자, 우리.";
+
+  async function submitNotice(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setNoticeError("");
+    try {
+      await apiPost({ action: "update-notice", body: form.get("body") });
+      setEditingNotice(false);
+      await onSaved();
+    } catch (caught) {
+      setNoticeError(caught instanceof Error ? caught.message : "공지를 수정하지 못했습니다.");
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -472,8 +491,12 @@ function HomePage({ go, rooms, records, onSaved }: { go: (page: PageKey) => void
           <pre>{`┌──────────────────┐\n│  M A T A E D O   │\n│                  │\n│    ●       ●     │\n│        2011      │\n└──────────────────┘`}</pre>
         </div>
         <div className="welcome-copy">
-          <h2>공지 / NOTICE</h2>
-          <p>선생님들이랑 마을 사람들에게는 들키지 말자, 우리.</p>
+          <div className="notice-heading"><h2>공지 / NOTICE</h2><button className="text-button" type="button" onClick={() => { setEditingNotice((value) => !value); setNoticeError(""); }}>[ {editingNotice ? "닫기" : "수정"} ]</button></div>
+          {editingNotice ? <form className="notice-edit-form" onSubmit={submitNotice}>
+            <label>공지 내용<textarea name="body" defaultValue={noticeBody} maxLength={500} required /></label>
+            {noticeError && <p className="form-error">{noticeError}</p>}
+            <div className="form-actions"><button type="button" onClick={() => { setEditingNotice(false); setNoticeError(""); }}>취소</button><button type="submit">수정 저장</button></div>
+          </form> : <p>{noticeBody}</p>}
         </div>
       </section>
       <section className="quick-grid">

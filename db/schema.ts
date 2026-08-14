@@ -41,6 +41,12 @@ export const records = sqliteTable("records", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("records_story_date_idx").on(table.storyDate, table.createdAt)]);
 
+export const siteSettings = sqliteTable("site_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const comments = sqliteTable("comments", {
   id: text("id").primaryKey(),
   sectionId: text("section_id").notNull(),

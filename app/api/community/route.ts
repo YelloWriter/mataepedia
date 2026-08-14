@@ -111,7 +111,7 @@ export async function GET(request: Request) {
       return response({ comments: rows.results });
     }
 
-    const [rooms, records, events, characters] = await db.batch([
+    const [rooms, records, events, characters, siteNotice] = await db.batch([
       db.prepare(
         `SELECT r.id, r.title, r.description, r.creator_name AS creatorName,
                 r.story_year AS storyYear, r.status, r.created_at AS createdAt,
@@ -145,6 +145,14 @@ export async function GET(request: Request) {
          ORDER BY sort_order ASC, name ASC
          LIMIT 100`,
       ),
+      db
+        .prepare(
+          `SELECT value AS body, updated_at AS updatedAt
+           FROM site_settings
+           WHERE key = ?1
+           LIMIT 1`,
+        )
+        .bind("home_notice"),
     ]);
 
     return response({
@@ -152,6 +160,7 @@ export async function GET(request: Request) {
       records: records.results,
       timelineEvents: events.results,
       characters: characters.results,
+      siteNotice: siteNotice.results[0] ?? null,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "자료를 읽지 못했습니다.";
@@ -317,6 +326,22 @@ export async function POST(request: Request) {
           .bind(sessionId),
       ]);
       return response({ id }, 201);
+    }
+
+    if (action === "update-notice") {
+      const body = text(payload.body, 500);
+      if (!body) return fail("공지 내용을 입력해 주세요.");
+      await db
+        .prepare(
+          `INSERT INTO site_settings (key, value, updated_at)
+           VALUES (?1, ?2, CURRENT_TIMESTAMP)
+           ON CONFLICT(key) DO UPDATE SET
+             value = excluded.value,
+             updated_at = CURRENT_TIMESTAMP`,
+        )
+        .bind("home_notice", body)
+        .run();
+      return response({ ok: true });
     }
 
     if (action === "create-record") {
