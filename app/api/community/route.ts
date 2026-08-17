@@ -247,15 +247,34 @@ export async function POST(request: Request) {
         return response({ ok: true });
       }
 
+      const joinMessage = `${displayName}님이 입장하셨습니다.`;
+      const leaveMessage = `${displayName}님이 퇴장하셨습니다.`;
+      const latestPresenceMessage = await db
+        .prepare(
+          `SELECT body
+           FROM chat_messages
+           WHERE room_id = ?1 AND author_name = 'SYSTEM'
+             AND (body = ?2 OR body = ?3)
+           ORDER BY created_at DESC, rowid DESC
+           LIMIT 1`,
+        )
+        .bind(roomId, joinMessage, leaveMessage)
+        .first<{ body: string }>();
+
+      if (latestPresenceMessage?.body === joinMessage) {
+        await presenceStatement.run();
+        return response({ ok: true, announced: false });
+      }
+
       if (!(await hasMessageCapacity(db, roomId))) return fail("채팅 기록 보관 한도에 도달했습니다.", 409);
       const messageId = crypto.randomUUID();
       await db.batch([
         presenceStatement,
         db.prepare("INSERT INTO chat_messages (id, room_id, author_name, body) VALUES (?1, ?2, 'SYSTEM', ?3)")
-          .bind(messageId, roomId, `${displayName}님이 입장하셨습니다.`),
+          .bind(messageId, roomId, joinMessage),
         db.prepare("UPDATE chat_rooms SET last_message_at = CURRENT_TIMESTAMP WHERE id = ?1").bind(roomId),
       ]);
-      return response({ ok: true });
+      return response({ ok: true, announced: true });
     }
 
     if (action === "leave-room") {

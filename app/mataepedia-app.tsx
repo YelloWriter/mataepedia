@@ -311,6 +311,24 @@ function recordCommentSectionId(id: string) {
   return id === "rumor-1" || id === "rumor-2" ? id : `record:${id}`;
 }
 
+function withoutDuplicateJoinMessages(messages: ChatMessage[]) {
+  const enteredNames = new Set<string>();
+  const joinSuffix = "님이 입장하셨습니다.";
+  const leaveSuffix = "님이 퇴장하셨습니다.";
+
+  return messages.filter((message) => {
+    if (message.authorName !== "SYSTEM") return true;
+    if (message.body.endsWith(joinSuffix)) {
+      const name = message.body.slice(0, -joinSuffix.length);
+      if (enteredNames.has(name)) return false;
+      enteredNames.add(name);
+    } else if (message.body.endsWith(leaveSuffix)) {
+      enteredNames.delete(message.body.slice(0, -leaveSuffix.length));
+    }
+    return true;
+  });
+}
+
 async function apiPost(payload: Record<string, unknown>) {
   const response = await fetch("/api/community", {
     method: "POST",
@@ -401,7 +419,6 @@ export function MataepediaApp() {
             <p>ARCHIVE RANGE</p>
             <strong>2011—2015</strong>
           </div>
-          <div className="sidebar-warning">※ 이곳은 마태도 아이들이 만든 비공식 기록 보관소입니다.</div>
         </aside>
 
         <main className="content" id="main-content" key={page}>
@@ -1023,10 +1040,12 @@ function ChatRoom({ room, onBack }: { room: Room; onBack: () => void }) {
   const [joined, setJoined] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [showJoin, setShowJoin] = useState(false);
+  const [joining, setJoining] = useState(false);
   const [error, setError] = useState("");
   const sessionId = useRef<string>("");
   const logEnd = useRef<HTMLDivElement>(null);
   const loadedOnce = useRef(false);
+  const visibleMessages = useMemo(() => withoutDuplicateJoinMessages(messages), [messages]);
 
   const load = useCallback(async () => {
     const recent = loadedOnce.current ? "&recent=1" : "";
@@ -1060,10 +1079,13 @@ function ChatRoom({ room, onBack }: { room: Room; onBack: () => void }) {
 
   async function join(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError("");
+    if (joining) return;
     const form = new FormData(event.currentTarget); const name = String(form.get("name") ?? "").trim();
     sessionId.current = crypto.randomUUID();
+    setJoining(true);
     try { await apiPost({ action: "join-room", roomId: room.id, sessionId: sessionId.current, displayName: name }); setDisplayName(name); setJoined(true); setShowJoin(false); await load(); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "입장하지 못했습니다."); }
+    finally { setJoining(false); }
   }
 
   async function leave(refresh = true, announce = true) {
@@ -1087,9 +1109,9 @@ function ChatRoom({ room, onBack }: { room: Room; onBack: () => void }) {
     <button className="back-link" onClick={backToList}>{"<-"} 채팅방 목록</button>
     <SectionTitle eyebrow={`CHAT LOG / ${room.storyYear}`} title={room.title} description={room.description || "이 방에는 설명이 없어."} />
     <div className="online-strip"><span>ONLINE {online.length.toString().padStart(2, "0")}</span><p>{online.length ? online.map((person) => person.displayName).join(" / ") : "현재 입장한 사람 없음"}</p></div>
-    <div className="chat-log" aria-live="polite">{messages.length ? messages.map((message) => <article key={message.id} className={message.authorName === "SYSTEM" ? "system-message" : ""}><header><strong>{message.authorName === "SYSTEM" ? "SYSTEM" : message.authorName}</strong></header><p>{message.body}</p></article>) : <p className="empty-log">— 아직 남은 대화가 없어 —</p>}<div ref={logEnd} /></div>
-    {room.status === "closed" ? <div className="closed-room">이 방은 닫혔어. 기록만 볼 수 있어.</div> : joined ? <form className="message-form" onSubmit={send}><span>{displayName} &gt;</span><input name="message" aria-label="채팅 메시지" maxLength={1000} autoComplete="off" required /><button type="submit">전송</button><button type="button" onClick={() => leave()}>퇴장하기</button></form> : <div className="join-panel"><p>지금은 대화기록 보기 상태야. ONLINE에는 표시되지 않아.</p><button className="primary-retro" onClick={() => setShowJoin(true)}>입장하기</button></div>}
-    {showJoin && <div className="modal-backdrop" role="presentation"><form className="modal" onSubmit={join}><p className="eyebrow">ENTER CHATROOM</p><h2>채팅방에 들어갈 이름</h2><input name="name" maxLength={24} required />{error && <p className="form-error">{error}</p>}<div className="form-actions"><button type="button" onClick={() => setShowJoin(false)}>취소</button><button type="submit">입장</button></div></form></div>}
+    <div className="chat-log" aria-live="polite">{visibleMessages.length ? visibleMessages.map((message) => <article key={message.id} className={message.authorName === "SYSTEM" ? "system-message" : ""}><header><strong>{message.authorName === "SYSTEM" ? "SYSTEM" : message.authorName}</strong></header><p>{message.body}</p></article>) : <p className="empty-log">— 아직 남은 대화가 없어 —</p>}<div ref={logEnd} /></div>
+    {room.status === "closed" ? <div className="closed-room">이 방은 닫혔어. 기록만 볼 수 있어.</div> : joined ? <form className="message-form" onSubmit={send}><span>{displayName} &gt;</span><input name="message" aria-label="채팅 메시지" maxLength={1000} autoComplete="off" required /><button type="submit">전송</button><button type="button" onClick={() => leave()}>퇴장하기</button></form> : <div className="join-panel"><button className="primary-retro" onClick={() => setShowJoin(true)}>입장하기</button></div>}
+    {showJoin && <div className="modal-backdrop" role="presentation"><form className="modal" onSubmit={join}><p className="eyebrow">ENTER CHATROOM</p><h2>채팅방에 들어갈 이름</h2><input name="name" maxLength={24} required />{error && <p className="form-error">{error}</p>}<div className="form-actions"><button type="button" onClick={() => setShowJoin(false)}>취소</button><button type="submit" disabled={joining}>{joining ? "입장 중" : "입장"}</button></div></form></div>}
     {error && !showJoin && <p className="form-error standalone">{error}</p>}
   </>;
 }
