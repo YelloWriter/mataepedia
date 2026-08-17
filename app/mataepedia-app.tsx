@@ -16,7 +16,7 @@ type Room = {
   messageCount?: number;
   onlineCount: number;
 };
-type ChatMessage = { id: string; roomId: string; authorName: string; body: string; createdAt: string };
+type ChatMessage = { id: string; roomId: string; authorName: string; body: string; createdAt: string; canEdit: boolean };
 type RecordItem = {
   id: string;
   kind: "diary" | "memo" | "guestbook" | "rumor";
@@ -324,6 +324,19 @@ const characterDetailFields = [
   { key: "memorableEvent", label: "지난 4년 동안 가장 기억나는 일" },
   { key: "fearOrHabit", label: "2011년 이후 생긴 두려움이나 습관" },
 ] as const;
+
+const playerCharacterIds = new Set([
+  "official-character-2015-han-yeoul",
+  "official-character-2015-yu-jeha",
+  "official-character-2015-lee-haedam",
+  "official-character-2015-park-juha",
+  "official-character-2015-jang-yujin",
+]);
+
+function hasPlayerCharacterDetails(person: Pick<Character, "id" | "storyYear">) {
+  if ((person.storyYear ?? 2011) !== 2015) return false;
+  return playerCharacterIds.has(person.id);
+}
 
 function characterImageAlt(person: Character) {
   const name = person.name.replace(/[,\s]*\(?\d+세\)?\s*$/, "");
@@ -858,13 +871,6 @@ function PeoplePage({ characters, onSaved }: { characters: Character[]; onSaved:
         storyYear,
         imageDataUrl: draftImage,
         sortOrder: characters.length,
-        changedSince2011: form.get("changedSince2011"),
-        keepsake2011: form.get("keepsake2011"),
-        traumaImpact: form.get("traumaImpact"),
-        appearanceChange: form.get("appearanceChange"),
-        grades: form.get("grades"),
-        memorableEvent: form.get("memorableEvent"),
-        fearOrHabit: form.get("fearOrHabit"),
         ownerKey: localOwnerKey(),
       });
       formElement.reset();
@@ -887,7 +893,6 @@ function PeoplePage({ characters, onSaved }: { characters: Character[]; onSaved:
       <label>극중 연도<select name="year" defaultValue={activeYear}>{characterYears.map((year) => <option key={year}>{year}</option>)}</select></label>
       <div className="character-image-field wide"><span>인물 이미지</span><ImageUploadField imageDataUrl={draftImage} name="새 인물" index={characters.length} onFile={chooseImage} mode="form" /><small>클릭하거나 드래그앤드롭한 뒤 확대·축소하고 크롭할 수 있어.</small></div>
       <label className="wide">인물 설명<textarea name="description" maxLength={6000} required /></label>
-      {activeYear === 2015 && <fieldset className="character-detail-editor wide"><legend>지난 4년 기록</legend>{characterDetailFields.map((field) => <label key={field.key}>{field.label}<textarea name={field.key} maxLength={1200} /></label>)}</fieldset>}
       {error && <p className="form-error">{error}</p>}
       <div className="form-actions"><button type="button" onClick={() => setShowAdd(false)}>취소</button><button type="submit">인물 추가</button></div>
     </form>}
@@ -901,6 +906,7 @@ function PeoplePage({ characters, onSaved }: { characters: Character[]; onSaved:
 
 function CharacterCard({ person, index, onSaved }: { person: Character; index: number; onSaved: () => Promise<void> }) {
   const confirmDelete = useSiteConfirm();
+  const showPlayerDetails = hasPlayerCharacterDetails(person);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -947,19 +953,24 @@ function CharacterCard({ person, index, onSaved }: { person: Character; index: n
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const saved = await save({
+    const values: Partial<Character> = {
       name: String(form.get("name") ?? ""),
       summary: String(form.get("summary") ?? ""),
       description: String(form.get("description") ?? ""),
       storyYear: Number(form.get("year")),
-      changedSince2011: String(form.get("changedSince2011") ?? ""),
-      keepsake2011: String(form.get("keepsake2011") ?? ""),
-      traumaImpact: String(form.get("traumaImpact") ?? ""),
-      appearanceChange: String(form.get("appearanceChange") ?? ""),
-      grades: String(form.get("grades") ?? ""),
-      memorableEvent: String(form.get("memorableEvent") ?? ""),
-      fearOrHabit: String(form.get("fearOrHabit") ?? ""),
-    });
+    };
+    if (showPlayerDetails) {
+      Object.assign(values, {
+        changedSince2011: String(form.get("changedSince2011") ?? ""),
+        keepsake2011: String(form.get("keepsake2011") ?? ""),
+        traumaImpact: String(form.get("traumaImpact") ?? ""),
+        appearanceChange: String(form.get("appearanceChange") ?? ""),
+        grades: String(form.get("grades") ?? ""),
+        memorableEvent: String(form.get("memorableEvent") ?? ""),
+        fearOrHabit: String(form.get("fearOrHabit") ?? ""),
+      });
+    }
+    const saved = await save(values);
     if (saved) setEditing(false);
   }
 
@@ -974,7 +985,7 @@ function CharacterCard({ person, index, onSaved }: { person: Character; index: n
   return <article className="character-card">
     <ImageUploadField imageDataUrl={person.imageDataUrl} name={person.name} index={index} onFile={chooseImage} busy={busy} altText={characterImageAlt(person)} emptyText={person.storyYear === 2015 ? <>IMAGE PENDING /<br />2015년 인물 이미지 준비 중</> : undefined} />
     <div className="character-content"><p className="eyebrow">PERSON FILE / {String(index + 1).padStart(3, "0")}</p>
-      {editing ? <form className="character-editor" onSubmit={submit}><label>이름<input name="name" defaultValue={person.name} maxLength={40} required /></label><label>한 마디<input name="summary" defaultValue={person.summary} maxLength={120} /></label><label>극중 연도<select name="year" defaultValue={person.storyYear ?? 2011}>{characterYears.map((year) => <option key={year}>{year}</option>)}</select></label><label>인물 설명<textarea name="description" defaultValue={person.description} maxLength={6000} /></label>{person.storyYear === 2015 && <fieldset className="character-detail-editor"><legend>지난 4년 기록</legend>{characterDetailFields.map((field) => <label key={field.key}>{field.label}<textarea name={field.key} defaultValue={person[field.key] ?? ""} maxLength={1200} /></label>)}</fieldset>}<div><button type="button" onClick={() => setEditing(false)}>취소</button><button type="submit" disabled={busy}>저장</button></div></form> : <><h2>{person.name}</h2><strong>{person.summary}</strong><p className="character-description">{person.description}</p>{person.storyYear === 2015 && <dl className="character-detail-list">{characterDetailFields.map((field) => <div key={field.key}><dt>{field.label}</dt><dd>{person[field.key] || <span>— 아직 비어 있음 —</span>}</dd></div>)}</dl>}<div className="entry-actions"><button onClick={() => setEditing(true)}>수정</button><button onClick={remove}>삭제</button></div></>}
+      {editing ? <form className="character-editor" onSubmit={submit}><label>이름<input name="name" defaultValue={person.name} maxLength={40} required /></label><label>한 마디<input name="summary" defaultValue={person.summary} maxLength={120} /></label><label>극중 연도<select name="year" defaultValue={person.storyYear ?? 2011}>{characterYears.map((year) => <option key={year}>{year}</option>)}</select></label><label>인물 설명<textarea name="description" defaultValue={person.description} maxLength={6000} /></label>{showPlayerDetails && <fieldset className="character-detail-editor"><legend>지난 4년 기록</legend>{characterDetailFields.map((field) => <label key={field.key}>{field.label}<textarea name={field.key} defaultValue={person[field.key] ?? ""} maxLength={1200} /></label>)}</fieldset>}<div><button type="button" onClick={() => setEditing(false)}>취소</button><button type="submit" disabled={busy}>저장</button></div></form> : <><h2>{person.name}</h2><strong>{person.summary}</strong><p className="character-description">{person.description}</p>{showPlayerDetails && <dl className="character-detail-list">{characterDetailFields.map((field) => <div key={field.key}><dt>{field.label}</dt><dd>{person[field.key] || <span>— 아직 비어 있음 —</span>}</dd></div>)}</dl>}<div className="entry-actions"><button onClick={() => setEditing(true)}>수정</button><button onClick={remove}>삭제</button></div></>}
       {error && <p className="form-error standalone">{error}</p>}
     </div>
     <CommentsSection sectionId={`character-${person.id}`} storyYear={person.storyYear || 2011} />
@@ -1125,12 +1136,16 @@ function ChatLobby({ rooms, onSelect, onSaved }: { rooms: Room[]; onSelect: (id:
 }
 
 function ChatRoom({ room, onBack }: { room: Room; onBack: () => void }) {
+  const confirmDelete = useSiteConfirm();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [online, setOnline] = useState<{ displayName: string }[]>([]);
   const [joined, setJoined] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [showJoin, setShowJoin] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
+  const [editingBody, setEditingBody] = useState("");
+  const [messageBusy, setMessageBusy] = useState("");
   const [error, setError] = useState("");
   const sessionId = useRef<string>("");
   const logEnd = useRef<HTMLDivElement>(null);
@@ -1139,7 +1154,10 @@ function ChatRoom({ room, onBack }: { room: Room; onBack: () => void }) {
 
   const load = useCallback(async () => {
     const recent = loadedOnce.current ? "&recent=1" : "";
-    const response = await fetch(`/api/community?resource=messages&roomId=${encodeURIComponent(room.id)}${recent}`, { cache: "no-store" });
+    const response = await fetch(`/api/community?resource=messages&roomId=${encodeURIComponent(room.id)}${recent}`, {
+      cache: "no-store",
+      headers: { "X-Mataepedia-Owner-Key": localOwnerKey() },
+    });
     if (response.ok) {
       const data = await response.json();
       const incoming = (data.messages ?? []) as ChatMessage[];
@@ -1191,15 +1209,83 @@ function ChatRoom({ room, onBack }: { room: Room; onBack: () => void }) {
     event.preventDefault(); setError("");
     const formElement = event.currentTarget;
     const form = new FormData(formElement); const body = String(form.get("message") ?? "").trim(); if (!body) return;
-    try { await apiPost({ action: "send-message", roomId: room.id, sessionId: sessionId.current, displayName, body }); formElement.reset(); await load(); window.setTimeout(() => logEnd.current?.scrollIntoView({ behavior: "smooth" }), 20); }
+    try { await apiPost({ action: "send-message", roomId: room.id, sessionId: sessionId.current, displayName, body, ownerKey: localOwnerKey() }); formElement.reset(); await load(); window.setTimeout(() => logEnd.current?.scrollIntoView({ behavior: "smooth" }), 20); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "메시지를 보내지 못했습니다."); }
+  }
+
+  function beginMessageEdit(message: ChatMessage) {
+    if (!message.canEdit || message.authorName === "SYSTEM") return;
+    setError("");
+    setEditingMessage(message);
+    setEditingBody(message.body);
+  }
+
+  async function updateMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingMessage || messageBusy) return;
+    const body = editingBody.trim();
+    if (!body) {
+      setError("수정할 메시지를 적어 줘.");
+      return;
+    }
+    setError("");
+    setMessageBusy(editingMessage.id);
+    try {
+      await apiPost({ action: "update-message", id: editingMessage.id, roomId: room.id, body, ownerKey: localOwnerKey() });
+      setMessages((current) => current.map((message) => message.id === editingMessage.id ? { ...message, body } : message));
+      setEditingMessage(null);
+      setEditingBody("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "메시지를 수정하지 못했습니다.");
+    } finally {
+      setMessageBusy("");
+    }
+  }
+
+  async function removeMessage(message: ChatMessage) {
+    if (!message.canEdit || message.authorName === "SYSTEM" || messageBusy) return;
+    const excerpt = message.body.length > 38 ? `${message.body.slice(0, 38)}…` : message.body;
+    if (!(await confirmDelete(`‘${excerpt}’ 메시지를 삭제할까?`))) return;
+    setError("");
+    setMessageBusy(message.id);
+    try {
+      await apiPost({ action: "delete-message", id: message.id, roomId: room.id, ownerKey: localOwnerKey() });
+      setMessages((current) => current.filter((item) => item.id !== message.id));
+      if (editingMessage?.id === message.id) {
+        setEditingMessage(null);
+        setEditingBody("");
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "메시지를 삭제하지 못했습니다.");
+    } finally {
+      setMessageBusy("");
+    }
   }
 
   return <>
     <button className="back-link" onClick={backToList}>{"<-"} 채팅방 목록</button>
     <SectionTitle eyebrow={`CHAT LOG / ${room.storyYear}`} title={room.title} description={room.description || "이 방에는 설명이 없어."} />
     <div className="online-strip"><span>ONLINE {online.length.toString().padStart(2, "0")}</span><p>{online.length ? online.map((person) => person.displayName).join(" / ") : "현재 입장한 사람 없음"}</p></div>
-    <div className="chat-log" aria-live="polite">{visibleMessages.length ? visibleMessages.map((message) => <article key={message.id} className={message.authorName === "SYSTEM" ? "system-message" : ""}><header><strong>{message.authorName === "SYSTEM" ? "SYSTEM" : message.authorName}</strong></header><p>{message.body}</p></article>) : <p className="empty-log">— 아직 남은 대화가 없어 —</p>}<div ref={logEnd} /></div>
+    <div className="chat-log" aria-live="polite">
+      {visibleMessages.length ? visibleMessages.map((message) => {
+        const systemMessage = message.authorName === "SYSTEM";
+        const isEditing = editingMessage?.id === message.id;
+        return <article key={message.id} className={systemMessage ? "system-message" : ""}>
+          <header>
+            <strong>{systemMessage ? "SYSTEM" : message.authorName}</strong>
+            {!systemMessage && message.canEdit && <div className="chat-message-actions">
+              <button type="button" onClick={() => beginMessageEdit(message)} disabled={messageBusy === message.id}>수정</button>
+              <button type="button" onClick={() => removeMessage(message)} disabled={messageBusy === message.id}>삭제</button>
+            </div>}
+          </header>
+          {isEditing ? <form className="chat-message-edit-form" onSubmit={updateMessage}>
+            <textarea aria-label="메시지 수정" value={editingBody} onChange={(event) => setEditingBody(event.target.value)} maxLength={1000} required />
+            <div><button type="button" onClick={() => { setEditingMessage(null); setEditingBody(""); }} disabled={messageBusy === message.id}>취소</button><button type="submit" disabled={messageBusy === message.id}>{messageBusy === message.id ? "저장 중" : "저장"}</button></div>
+          </form> : <p>{message.body}</p>}
+        </article>;
+      }) : <p className="empty-log">— 아직 남은 대화가 없어 —</p>}
+      <div ref={logEnd} />
+    </div>
     {room.status === "closed" ? <div className="closed-room">이 방은 닫혔어. 기록만 볼 수 있어.</div> : joined ? <form className="message-form" onSubmit={send}><span>{displayName} &gt;</span><input name="message" aria-label="채팅 메시지" maxLength={1000} autoComplete="off" required /><button type="submit">전송</button><button type="button" onClick={() => leave()}>퇴장하기</button></form> : <div className="join-panel"><button className="primary-retro" onClick={() => setShowJoin(true)}>입장하기</button></div>}
     {showJoin && <div className="modal-backdrop" role="presentation"><form className="modal" onSubmit={join}><p className="eyebrow">ENTER CHATROOM</p><h2>채팅방에 들어갈 이름</h2><input name="name" maxLength={24} required />{error && <p className="form-error">{error}</p>}<div className="form-actions"><button type="button" onClick={() => setShowJoin(false)}>취소</button><button type="submit" disabled={joining}>{joining ? "입장 중" : "입장"}</button></div></form></div>}
     {error && !showJoin && <p className="form-error standalone">{error}</p>}

@@ -1,0 +1,1 @@
+ALTER TABLE `chat_messages` ADD `owner_key_hash` text;

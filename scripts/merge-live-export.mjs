@@ -172,12 +172,13 @@ for (const [roomId, roomExport] of Object.entries(exported.messagesByRoom ?? {})
   statements.push(`DELETE FROM chat_messages WHERE room_id = ${sql(roomId)};`);
   for (const message of roomExport.messages ?? []) {
     statements.push(`INSERT INTO chat_messages
-      (id, room_id, author_name, body, created_at)
+      (id, room_id, author_name, body, owner_key_hash, created_at)
       VALUES ${values([
         message.id,
         message.roomId,
         message.authorName,
         message.body,
+        null,
         message.createdAt ?? "2011-12-31T23:59:00.000Z",
       ])};`);
   }

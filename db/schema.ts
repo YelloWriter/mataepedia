@@ -19,6 +19,7 @@ export const chatMessages = sqliteTable("chat_messages", {
   roomId: text("room_id").notNull().references(() => chatRooms.id),
   authorName: text("author_name").notNull(),
   body: text("body").notNull(),
+  ownerKeyHash: text("owner_key_hash"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("chat_messages_room_created_idx").on(table.roomId, table.createdAt)]);
 

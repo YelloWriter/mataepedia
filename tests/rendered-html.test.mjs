@@ -28,7 +28,7 @@ test("server-renders the Mataepedia shell and social metadata", async () => {
 });
 
 test("keeps the public data features, editing controls, and free-tier guardrails in source", async () => {
-  const [page, app, api, css, schema, wrangler, packageJson, legacyMigration, cleanupMigration, characterYearMigration, aftermathMigration, islandYearsMigration, editableRumorsMigration, noticeMigration, build03Migration, commentYearMigration, characterImagesMigration, migrationJournal] = await Promise.all([
+  const [page, app, api, css, schema, wrangler, packageJson, legacyMigration, cleanupMigration, characterYearMigration, aftermathMigration, islandYearsMigration, editableRumorsMigration, noticeMigration, build03Migration, commentYearMigration, characterImagesMigration, migrationJournal, cloudflareBaseline, yunHyangjaImageMigration, rumorVoiceMigration, chatOwnershipMigration, chatOwnershipDrizzleMigration, yunHyangjaImage] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/mataepedia-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/community/route.ts", import.meta.url), "utf8"),
@@ -47,6 +47,12 @@ test("keeps the public data features, editing controls, and free-tier guardrails
     readFile(new URL("../drizzle/0010_brief_quentin_quire.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0011_2015_character_images.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8"),
+    readFile(new URL("../cloudflare-migrations/0000_mataepedia_baseline.sql", import.meta.url), "utf8"),
+    readFile(new URL("../cloudflare-migrations/0001_yun_hyangja_image.sql", import.meta.url), "utf8"),
+    readFile(new URL("../cloudflare-migrations/0002_rumor_child_voice.sql", import.meta.url), "utf8"),
+    readFile(new URL("../cloudflare-migrations/0003_chat_message_ownership.sql", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0012_flippant_husk.sql", import.meta.url), "utf8"),
+    readFile(new URL("../public/legacy/characters/2015/yun-hyangja.png", import.meta.url)),
   ]);
 
   assert.match(page, /MataepediaApp/);
@@ -96,6 +102,14 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(app, /2011년에 얻은 물건이 있다면, 그 물건은 어떻게 했나요\?/);
   assert.match(app, /광기와 공포증, 상처는 어떤 영향을 미쳤나요\?/);
   assert.match(app, /대학을 가려면 성적관리가 중요합니다\. 잘 하고 있나요\?/);
+  assert.match(app, /const playerCharacterIds = new Set/);
+  assert.match(app, /function hasPlayerCharacterDetails/);
+  assert.match(app, /playerCharacterIds\.has\(person\.id\)/);
+  assert.doesNotMatch(app, /playerCharacterNames|normalizedCharacterName/);
+  assert.match(app, /const showPlayerDetails = hasPlayerCharacterDetails\(person\)/);
+  assert.match(app, /\{showPlayerDetails && <fieldset className="character-detail-editor">/);
+  assert.match(app, /\{showPlayerDetails && <dl className="character-detail-list">/);
+  assert.doesNotMatch(app, /\{activeYear === 2015 && <fieldset className="character-detail-editor wide">/);
   assert.match(app, /마태 식물원/);
   assert.match(app, /ARCHIVED \/ 2011년 기록 \/ 현재 철거됨/);
   assert.match(app, /아직 기록 없음/);
@@ -128,6 +142,11 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(app, /disabled=\{joining\}/);
   assert.match(app, /withoutDuplicateJoinMessages/);
   assert.match(app, /enteredNames\.has\(name\)/);
+  assert.match(app, /X-Mataepedia-Owner-Key/);
+  assert.match(app, /action: "update-message"/);
+  assert.match(app, /action: "delete-message"/);
+  assert.match(app, /chat-message-edit-form/);
+  assert.match(app, /message\.canEdit/);
   assert.match(api, /messages:\s*20_000/);
   assert.match(api, /messagesPerRoom:\s*5_000/);
   assert.match(api, /WITH RECURSIVE descendants/);
@@ -140,6 +159,11 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(api, /const announce = payload\.announce === true/);
   assert.match(api, /announce && await hasMessageCapacity/);
   assert.match(api, /author_name, body\) VALUES \(\?1, \?2, 'SYSTEM', \?3\)/);
+  assert.match(api, /action === "update-message" \|\| action === "delete-message"/);
+  assert.match(api, /owner_key_hash AS ownerKeyHash/);
+  assert.match(api, /message\.authorName === "SYSTEM"/);
+  assert.match(api, /owner_key_hash IS NULL OR owner_key_hash = \?2/);
+  assert.match(api, /message\.ownerKeyHash && message\.ownerKeyHash !== presentedOwnerHash/);
   assert.match(api, /action === "update-record"/);
   assert.match(api, /action === "update-notice"/);
   assert.match(api, /INSERT INTO site_settings/);
@@ -167,6 +191,8 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(css, /\.character-photo img[^}]*width: auto[^}]*height: calc\(var\(--character-photo-height\) - 2px\)/);
   assert.match(css, /\.character-photo \{[^}]*--character-photo-height: clamp\(/);
   assert.match(css, /\.chat-year-groups/);
+  assert.match(css, /\.chat-message-actions/);
+  assert.match(css, /\.chat-message-edit-form/);
   assert.match(css, /\.comment-form[^}]*grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(css, /\.character-year-tabs/);
   assert.match(css, /\.guestbook-actions/);
@@ -178,6 +204,7 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(schema, /storyDate: text\("story_date"\)/);
   assert.match(schema, /storyYear: integer\("story_year"\)\.notNull\(\)\.default\(2011\)/);
   assert.match(schema, /changedSince2011: text\("changed_since_2011"\)/);
+  assert.match(schema, /ownerKeyHash: text\("owner_key_hash"\)/);
   assert.equal((legacyMigration.match(/INSERT OR IGNORE INTO comments/g) ?? []).length, 64);
   assert.equal((legacyMigration.match(/INSERT OR IGNORE INTO characters/g) ?? []).length, 11);
   assert.match(cleanupMigration, /title = '테스트할게\.'/);
@@ -241,6 +268,17 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(characterImagesMigration, /legacy\/characters\/2015\/caretaker\.png/);
   assert.match(characterImagesMigration, /legacy\/characters\/2015\/seon-yuna\.png/);
   assert.match(migrationJournal, /0011_2015_character_images/);
+  assert.match(cloudflareBaseline, /official-character-2015-yun-hyangja[^\n]*legacy\/characters\/2015\/yun-hyangja\.png/);
+  assert.match(cloudflareBaseline, /윤향자 선생님을 봤다는 사람도 없어/);
+  assert.match(yunHyangjaImageMigration, /official-character-2015-yun-hyangja/);
+  assert.match(yunHyangjaImageMigration, /legacy\/characters\/2015\/yun-hyangja\.png/);
+  assert.equal((rumorVoiceMigration.match(/UPDATE `records`/g) ?? []).length, 15);
+  assert.equal((rumorVoiceMigration.match(/AND `kind` = 'rumor'/g) ?? []).length, 15);
+  assert.match(rumorVoiceMigration, /학교에서는 출산휴가라고 했는데 정확한 이야기를 아는 사람은 없어/);
+  assert.ok(yunHyangjaImage.byteLength > 10_000);
+  assert.match(chatOwnershipMigration, /ALTER TABLE `chat_messages` ADD COLUMN `owner_key_hash` text/);
+  assert.match(chatOwnershipDrizzleMigration, /ALTER TABLE `chat_messages` ADD `owner_key_hash` text/);
+  assert.match(migrationJournal, /0012_flippant_husk/);
   assert.match(wrangler, /"binding": "DB"/);
   assert.match(wrangler, /"database_name": "mataepedia-db"/);
   assert.match(wrangler, /"compatibility_date": "2026-05-15"/);

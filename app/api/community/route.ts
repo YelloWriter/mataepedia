@@ -68,25 +68,33 @@ export async function GET(request: Request) {
       const roomId = text(url.searchParams.get("roomId"), 80);
       const recentOnly = url.searchParams.get("recent") === "1";
       if (!roomId) return fail("방 정보가 없습니다.");
+      const presentedOwnerKey = text(request.headers.get("X-Mataepedia-Owner-Key"), 200);
+      const presentedOwnerHash = presentedOwnerKey ? await ownerHash(presentedOwnerKey) : "";
 
       const [messages, presence] = await db.batch([
         db
           .prepare(
             recentOnly
               ? `SELECT id, room_id AS roomId, author_name AS authorName, body,
-                        created_at AS createdAt
+                        created_at AS createdAt,
+                        CASE WHEN author_name <> 'SYSTEM'
+                                   AND (owner_key_hash IS NULL OR owner_key_hash = ?2)
+                             THEN 1 ELSE 0 END AS canEdit
                  FROM chat_messages
                  WHERE room_id = ?1
                  ORDER BY created_at DESC, rowid DESC
                  LIMIT 100`
               : `SELECT id, room_id AS roomId, author_name AS authorName, body,
-                        created_at AS createdAt
+                        created_at AS createdAt,
+                        CASE WHEN author_name <> 'SYSTEM'
+                                   AND (owner_key_hash IS NULL OR owner_key_hash = ?2)
+                             THEN 1 ELSE 0 END AS canEdit
                  FROM chat_messages
                  WHERE room_id = ?1
                  ORDER BY created_at ASC, rowid ASC
                  LIMIT 5000`,
           )
-          .bind(roomId),
+          .bind(roomId, presentedOwnerHash),
         db
           .prepare(
             `SELECT display_name AS displayName
@@ -97,8 +105,13 @@ export async function GET(request: Request) {
           .bind(roomId),
       ]);
 
+      const ownedMessages = (messages.results as Record<string, unknown>[]).map((message) => ({
+        ...message,
+        canEdit: Boolean(message.canEdit),
+      }));
+
       return response({
-        messages: recentOnly ? [...messages.results].reverse() : messages.results,
+        messages: recentOnly ? ownedMessages.reverse() : ownedMessages,
         online: presence.results,
       });
     }
@@ -336,7 +349,8 @@ export async function POST(request: Request) {
       const sessionId = text(payload.sessionId, 120);
       const displayName = text(payload.displayName, 24);
       const body = text(payload.body, 1_000);
-      if (!roomId || !sessionId || !displayName || !body) return fail("메시지 정보를 확인해 주세요.");
+      const ownerKey = text(payload.ownerKey, 200);
+      if (!roomId || !sessionId || !displayName || !body || !ownerKey) return fail("메시지 정보를 확인해 주세요.");
 
       const room = await db
         .prepare("SELECT status FROM chat_rooms WHERE id = ?1")
@@ -364,10 +378,10 @@ export async function POST(request: Request) {
       await db.batch([
         db
           .prepare(
-            `INSERT INTO chat_messages (id, room_id, author_name, body)
-             VALUES (?1, ?2, ?3, ?4)`,
+            `INSERT INTO chat_messages (id, room_id, author_name, body, owner_key_hash)
+             VALUES (?1, ?2, ?3, ?4, ?5)`,
           )
-          .bind(id, roomId, displayName, body),
+          .bind(id, roomId, displayName, body, await ownerHash(ownerKey)),
         db
           .prepare("UPDATE chat_rooms SET last_message_at = CURRENT_TIMESTAMP WHERE id = ?1")
           .bind(roomId),
@@ -376,6 +390,68 @@ export async function POST(request: Request) {
           .bind(sessionId),
       ]);
       return response({ id }, 201);
+    }
+
+    if (action === "update-message" || action === "delete-message") {
+      const id = text(payload.id, 80);
+      const roomId = text(payload.roomId, 80);
+      const ownerKey = text(payload.ownerKey, 200);
+      const body = action === "update-message" ? text(payload.body, 1_000) : "";
+      if (!id || !roomId || !ownerKey || (action === "update-message" && !body)) {
+        return fail(action === "update-message" ? "수정할 메시지 내용을 확인해 주세요." : "삭제할 메시지 정보가 없습니다.");
+      }
+
+      const room = await db
+        .prepare("SELECT id FROM chat_rooms WHERE id = ?1")
+        .bind(roomId)
+        .first<{ id: string }>();
+      if (!room) return fail("존재하지 않는 방입니다.", 404);
+
+      const message = await db
+        .prepare(
+          `SELECT room_id AS roomId, author_name AS authorName,
+                  owner_key_hash AS ownerKeyHash
+           FROM chat_messages
+           WHERE id = ?1`,
+        )
+        .bind(id)
+        .first<{ roomId: string; authorName: string; ownerKeyHash: string | null }>();
+      if (!message || message.roomId !== roomId) return fail("존재하지 않는 메시지입니다.", 404);
+      if (message.authorName === "SYSTEM") return fail("시스템 메시지는 수정하거나 삭제할 수 없어.", 403);
+      const presentedOwnerHash = await ownerHash(ownerKey);
+      if (message.ownerKeyHash && message.ownerKeyHash !== presentedOwnerHash) {
+        return fail("이 브라우저에서 쓴 메시지만 수정하거나 삭제할 수 있어.", 403);
+      }
+
+      if (action === "update-message") {
+        await db
+          .prepare(
+            `UPDATE chat_messages
+             SET body = ?2
+             WHERE id = ?1 AND room_id = ?3
+               AND (owner_key_hash IS NULL OR owner_key_hash = ?4)`,
+          )
+          .bind(id, body, roomId, presentedOwnerHash)
+          .run();
+        return response({ ok: true });
+      }
+
+      await db.batch([
+        db
+          .prepare("DELETE FROM chat_messages WHERE id = ?1 AND room_id = ?2 AND (owner_key_hash IS NULL OR owner_key_hash = ?3)")
+          .bind(id, roomId, presentedOwnerHash),
+        db
+          .prepare(
+            `UPDATE chat_rooms
+             SET last_message_at = COALESCE(
+               (SELECT MAX(created_at) FROM chat_messages WHERE room_id = ?1),
+               created_at
+             )
+             WHERE id = ?1`,
+          )
+          .bind(roomId),
+      ]);
+      return response({ ok: true });
     }
 
     if (action === "update-notice") {

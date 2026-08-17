@@ -85,6 +85,13 @@
       "when": 1786939200000,
       "tag": "0011_2015_character_images",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1786947655141,
+      "tag": "0012_flippant_husk",
+      "breakpoints": true
     }
   ]
 }
