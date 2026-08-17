@@ -332,7 +332,13 @@ input, textarea { caret-color: var(--ink); }
 }
 
 @media (max-width: 680px) {
-  .topbar { min-height: 90px; padding: 18px; }
+  .topbar { min-height: 90px; padding: 18px; flex-wrap: wrap; gap: 14px; }
+  .wordmark { min-width: 0; max-width: 100%; }
+  .wordmark small { letter-spacing: .08em; overflow-wrap: anywhere; }
+  .topbar-tools { width: 100%; min-width: 0; justify-content: flex-start; }
+  .sound-controls { width: 100%; min-width: 0; padding-right: 0; border-right: 0; }
+  .sound-controls label { min-width: 0; flex: 1; }
+  .sound-controls input { width: 100%; max-width: 160px; min-width: 0; }
   .system-note { display: none; }
   .content { padding: 30px 17px 60px; }
   .intro-grid, .two-column { grid-template-columns: 1fr; }

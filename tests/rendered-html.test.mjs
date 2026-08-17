@@ -28,13 +28,13 @@ test("server-renders the Mataepedia shell and social metadata", async () => {
 });
 
 test("keeps the public data features, editing controls, and free-tier guardrails in source", async () => {
-  const [page, app, api, css, schema, hosting, packageJson, legacyMigration, cleanupMigration, characterYearMigration, aftermathMigration, islandYearsMigration, editableRumorsMigration, noticeMigration, build03Migration, commentYearMigration, characterImagesMigration, migrationJournal] = await Promise.all([
+  const [page, app, api, css, schema, wrangler, packageJson, legacyMigration, cleanupMigration, characterYearMigration, aftermathMigration, islandYearsMigration, editableRumorsMigration, noticeMigration, build03Migration, commentYearMigration, characterImagesMigration, migrationJournal] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/mataepedia-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/community/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
-    readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
+    readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0002_legacy_netlify_data.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0003_remove_test_timeline_event.sql", import.meta.url), "utf8"),
@@ -241,7 +241,8 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(characterImagesMigration, /legacy\/characters\/2015\/caretaker\.png/);
   assert.match(characterImagesMigration, /legacy\/characters\/2015\/seon-yuna\.png/);
   assert.match(migrationJournal, /0011_2015_character_images/);
-  assert.match(hosting, /"d1": "DB"/);
-  assert.match(hosting, /"r2": null/);
+  assert.match(wrangler, /"binding": "DB"/);
+  assert.match(wrangler, /"database_name": "mataepedia-db"/);
+  assert.match(wrangler, /"compatibility_date": "2026-05-15"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });

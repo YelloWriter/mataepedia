@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "mataepedia",
+  "account_id": "cdc2ca1af36a5505af04fdb1e3213388",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "none"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mataepedia-db",
+      "database_id": "b6bc3747-d5cb-4946-af37-3acf4726e997",
+      "migrations_dir": "./cloudflare-migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
