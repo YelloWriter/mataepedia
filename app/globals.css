@@ -70,6 +70,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .notice-edit-form { display: grid; gap: 10px; margin-top: 14px; }
 .notice-edit-form label { display: grid; gap: 7px; font: .7rem "Courier New", monospace; }
 .notice-edit-form textarea { min-height: 110px; }
+.meta-information { margin: 18px 0 0; border: 1px dashed var(--line-dark); padding: 18px 20px; background: rgba(255,255,255,.1); }
+.meta-information h2 { margin: 0 0 10px; padding-bottom: 8px; border-bottom: 1px dotted var(--line); font-size: 1rem; }
+.meta-information p { margin: 0; max-width: 900px; line-height: 1.75; overflow-wrap: anywhere; }
 .quick-grid { display: grid; grid-template-columns: repeat(3, 1fr); margin: 28px 0 44px; border-top: 1px solid var(--line-dark); border-left: 1px solid var(--line-dark); }
 .quick-grid button { min-height: 142px; text-align: left; display: flex; flex-direction: column; justify-content: space-between; background: transparent; border: 0; border-right: 1px solid var(--line-dark); border-bottom: 1px solid var(--line-dark); padding: 18px; }
 .quick-grid button:hover { background: var(--paper-light); }
@@ -116,7 +119,7 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .year-marker strong { font-size: 2.4rem; letter-spacing: -.08em; }
 .year-marker span { color: var(--muted); font-size: .65rem; }
 .year-events { padding: 24px 0 24px 30px; }
-.year-events article { border-bottom: 1px dotted var(--line); padding: 0 0 18px; margin-bottom: 18px; }
+.year-events article { min-width: 0; border-bottom: 1px dotted var(--line); padding: 0 0 18px; margin-bottom: 18px; overflow-wrap: anywhere; }
 .year-events article:last-child { border: 0; margin: 0; }
 .year-events h2 { margin: 0 0 8px; font: 700 1rem "Courier New", monospace; }
 .year-events p { line-height: 1.7; margin: 0 0 8px; }
@@ -134,12 +137,19 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .record-card { min-width: 0; border: 1px solid var(--line-dark); background: rgba(255,255,255,.12); display: grid; grid-template-rows: 1fr auto; box-shadow: 4px 4px 0 var(--line); }
 .record-card.memo { min-height: 230px; background: var(--paper-light); }
 .record-card.diary { min-height: 280px; }
-.record-card-open { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; width: 100%; border: 0; background: transparent; padding: 20px; text-align: left; }
+.record-card-open { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; width: 100%; border: 0; background: transparent; padding: 20px; text-align: left; overflow-wrap: anywhere; }
 .record-card-open:hover { background: rgba(255,255,255,.25); }
 .record-card-open span, .record-card-open small { color: var(--muted); font: .68rem "Courier New", monospace; }
 .record-card-open strong { font: 700 1.2rem "Courier New", monospace; }
 .record-card-open p { margin: 0; line-height: 1.7; white-space: pre-wrap; }
 .record-card-open small { margin-top: auto; }
+.record-card-image { display: block; width: 100%; max-height: 220px; object-fit: contain; border: 1px solid var(--line-dark); background: var(--paper-light); }
+.record-image-placeholder { width: 100%; min-height: 120px; border: 1px dashed var(--line-dark); display: grid; place-items: center; padding: 20px; color: var(--muted); text-align: center; }
+.record-image-placeholder.document-placeholder { max-width: 760px; min-height: 260px; margin-bottom: 24px; }
+.record-document-image { max-width: 760px; margin: 0 0 24px; border: 1px solid var(--line-dark); background: var(--paper-light); padding: 12px; }
+.record-document-image img { display: block; width: 100%; max-height: 620px; object-fit: contain; }
+.record-image-editor { display: flex; flex-direction: column; gap: 7px; font-size: .72rem; }
+.record-image-editor > .text-button { align-self: flex-start; }
 .record-card-actions { justify-self: end; display: flex; border-top: 1px dotted var(--line); border-left: 1px dotted var(--line); }
 .record-card-actions button { border: 0; border-right: 1px dotted var(--line); background: transparent; padding: 8px 12px; font: .68rem "Courier New", monospace; text-decoration: underline; }
 .record-card-actions button:last-child { border-right: 0; }
@@ -154,7 +164,7 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .records-row span { color: var(--muted); font: .7rem "Courier New", monospace; }
 .table-empty { padding: 24px 8px; }
 .back-link { margin-bottom: 22px; }
-.document-body { max-width: 760px; min-height: 240px; font-size: 1rem; line-height: 1.9; }
+.document-body { max-width: 760px; min-height: 240px; font-size: 1rem; line-height: 1.9; overflow-wrap: anywhere; }
 .document-body p { margin: 0 0 10px; }
 .comments-section { max-width: 800px; margin-top: 60px; border-top: 3px double var(--line-dark); padding-top: 18px; }
 .comments-section.collapsed { margin-top: 18px; border-top: 1px dotted var(--line); padding-top: 8px; }
@@ -205,12 +215,20 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .character-card h2 { margin: 0 0 6px; font: 700 1.6rem "Courier New", monospace; }
 .character-card strong { font-size: .78rem; }
 .character-card p:not(.eyebrow) { line-height: 1.7; color: #3e403b; font-size: .85rem; }
-.character-content { min-width: 0; }
+.character-content { min-width: 0; overflow-wrap: anywhere; }
 .character-description { min-height: 90px; white-space: pre-wrap; padding: 10px 0; border-block: 1px dotted var(--line); }
+.character-detail-list { margin: 14px 0 0; border-top: 1px solid var(--line-dark); }
+.character-detail-list div { padding: 11px 0; border-bottom: 1px dotted var(--line); }
+.character-detail-list dt { margin-bottom: 5px; font-size: .72rem; font-weight: 700; line-height: 1.5; }
+.character-detail-list dd { margin: 0; white-space: pre-wrap; line-height: 1.65; font-size: .8rem; overflow-wrap: anywhere; }
+.character-detail-list dd span { color: var(--muted); font-size: .72rem; }
 .character-card > .comments-section { width: 100%; max-width: none; margin-top: 4px; }
 .character-editor { display: flex; flex-direction: column; gap: 9px; }
 .character-editor label { display: flex; flex-direction: column; gap: 5px; font-size: .68rem; }
 .character-editor textarea { height: 120px; min-height: 120px; resize: none; }
+.character-detail-editor { min-width: 0; margin: 8px 0 0; padding: 14px; border: 1px solid var(--line-dark); display: grid; gap: 12px; }
+.character-detail-editor legend { padding: 0 6px; font-size: .72rem; font-weight: 700; }
+.character-detail-editor textarea { min-height: 76px; height: 76px; resize: vertical; }
 .character-editor > div { display: flex; justify-content: flex-end; gap: 6px; }
 .character-editor button { border: 1px solid var(--line-dark); background: transparent; padding: 6px 10px; font: .68rem "Courier New", monospace; }
 .character-editor button:last-child { background: var(--inverse); color: var(--paper-light); }
@@ -218,19 +236,23 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .legacy-document-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; margin: 0 0 18px; padding-bottom: 9px; border-bottom: 1px solid var(--line-dark); }
 .legacy-document-heading h2 { margin: 0; font: 700 1.25rem "Courier New", monospace; }
 .legacy-document-heading time { color: var(--muted); font: .72rem "Courier New", monospace; }
-.legacy-document-body { max-width: 820px; line-height: 1.8; }
+.legacy-document-status { display: inline-block; margin: -4px 0 10px; border: 1px solid var(--line-dark); padding: 6px 8px; font-size: .7rem; letter-spacing: .03em; }
+.legacy-document-body { max-width: 820px; line-height: 1.8; overflow-wrap: anywhere; }
 .legacy-document-body p { margin: 10px 0; }
 .legacy-document > .comments-section { max-width: none; }
 .legacy-map { display: block; width: 100%; max-height: 620px; object-fit: contain; border: 1px solid var(--line-dark); filter: grayscale(1); background: var(--paper-light); }
+.legacy-map-frame { position: relative; width: 100%; }
+.garden-map-label { position: absolute; left: 25.2%; top: 45.1%; width: 8.35%; height: 10.35%; display: grid; place-items: center; background: #e7e7e2; border: 1px solid #20211e; text-align: center; font-size: clamp(.38rem, .85vw, .75rem); font-weight: 800; line-height: 1.25; }
 .document-alert { border: 1px solid var(--line-dark); padding: 12px; font-weight: 700; }
 .map-ascii { min-height: 440px; border: 1px solid var(--line-dark); background: var(--inverse); color: var(--paper-light); display: grid; place-items: center; overflow: auto; padding: 25px; }
 .definition-list { margin: 0; }
 .definition-list div { display: grid; grid-template-columns: 130px 1fr; padding: 13px 0; border-bottom: 1px dotted var(--line); }
 .definition-list dt { font-weight: 700; }
 .definition-list dd { margin: 0; color: var(--muted); }
-.rumor-list article { border-bottom: 1px solid var(--line-dark); padding: 24px 0; }
+.rumor-list article { min-width: 0; border-bottom: 1px solid var(--line-dark); padding: 24px 0; overflow-wrap: anywhere; }
 .rumor-list h2 { margin: 0 0 8px; font: 700 1.2rem "Courier New", monospace; }
 .rumor-list p { line-height: 1.7; }
+.rumor-list .rumor-category { display: inline-block; margin: 2px 0 4px; border: 1px solid var(--line); padding: 3px 7px; color: var(--muted); font-size: .68rem; }
 .rumor-list small { color: var(--muted); font: .68rem "Courier New", monospace; }
 .rumor-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 18px; }
 .rumor-heading time { color: var(--muted); font: .76rem "Courier New", monospace; }
@@ -246,7 +268,7 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 .chat-year-heading span { color: var(--muted); font-size: .7rem; }
 .room-list { border-top: 2px solid var(--line-dark); margin-top: 14px; }
 .room-list .empty-box.compact { padding: 20px; border-top: 0; }
-.room-row { display: grid; grid-template-columns: 90px minmax(0, 1fr) 130px; gap: 22px; border-bottom: 1px solid var(--line-dark); padding: 22px 8px; }
+.room-row { min-width: 0; display: grid; grid-template-columns: 90px minmax(0, 1fr) 130px; gap: 22px; border-bottom: 1px solid var(--line-dark); padding: 22px 8px; overflow-wrap: anywhere; }
 .room-number { color: var(--muted); font-size: .65rem; }
 .room-year { margin: 0; color: var(--muted); font-size: .68rem; }
 .room-row h2 { margin: 4px 0 7px; font: 700 1.15rem "Courier New", monospace; }
@@ -336,6 +358,10 @@ input, textarea { caret-color: var(--ink); }
   .comment-form > * { grid-column: 1; }
   .character-card { min-height: 0; padding: 15px; gap: 15px; }
   .character-photo { --character-photo-height: clamp(180px, 52vw, 220px); }
+  .character-detail-editor { padding: 10px; }
+  .character-detail-list dt, .character-detail-list dd { overflow-wrap: anywhere; word-break: keep-all; }
+  .record-document-image, .record-image-placeholder.document-placeholder { max-width: 100%; }
+  .garden-map-label { font-size: clamp(.28rem, 1.5vw, .58rem); }
   .room-row { grid-template-columns: 1fr; gap: 10px; }
   .room-status { border-left: 0; border-top: 1px dotted var(--line); padding: 10px 0 0; align-items: flex-start; display: grid; grid-template-columns: auto auto 1fr; gap: 5px; }
   .room-status > div { justify-self: end; }

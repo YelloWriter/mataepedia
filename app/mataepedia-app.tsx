@@ -12,6 +12,8 @@ type Room = {
   status: "active" | "closed";
   createdAt: string;
   lastMessageAt: string;
+  storyDate?: string | null;
+  messageCount?: number;
   onlineCount: number;
 };
 type ChatMessage = { id: string; roomId: string; authorName: string; body: string; createdAt: string };
@@ -22,6 +24,8 @@ type RecordItem = {
   body: string;
   authorName: string;
   storyDate: string;
+  category?: string | null;
+  imageDataUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -34,6 +38,13 @@ type Character = {
   storyYear: number;
   imageDataUrl?: string | null;
   sortOrder?: number;
+  changedSince2011?: string;
+  keepsake2011?: string;
+  traumaImpact?: string;
+  appearanceChange?: string;
+  grades?: string;
+  memorableEvent?: string;
+  fearOrHabit?: string;
 };
 type Comment = {
   id: string;
@@ -41,6 +52,7 @@ type Comment = {
   parentId: string | null;
   authorName: string;
   body: string;
+  storyYear: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -173,7 +185,7 @@ function RetroSoundControls() {
   </div>;
 }
 
-function ImageUploadField({ imageDataUrl, name, index, onFile, busy = false, mode = "card" }: { imageDataUrl?: string | null; name: string; index: number; onFile: (file: File) => void; busy?: boolean; mode?: "card" | "form" }) {
+function ImageUploadField({ imageDataUrl, name, index, onFile, busy = false, mode = "card", altText, emptyText }: { imageDataUrl?: string | null; name: string; index: number; onFile: (file: File) => void; busy?: boolean; mode?: "card" | "form"; altText?: string; emptyText?: ReactNode }) {
   const [dragging, setDragging] = useState(false);
   const className = mode === "card" ? `character-photo upload-photo ${busy ? "busy" : ""} ${dragging ? "dragging" : ""}` : `image-drop-field ${dragging ? "dragging" : ""}`;
 
@@ -183,12 +195,12 @@ function ImageUploadField({ imageDataUrl, name, index, onFile, busy = false, mod
   }
 
   return <label className={className} title="클릭하거나 이미지를 끌어다 놓기" onDragEnter={(event) => { event.preventDefault(); setDragging(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }} onDrop={(event) => { event.preventDefault(); pick(event.dataTransfer.files?.[0]); }}>
-    {imageDataUrl ? <img src={imageDataUrl} alt={`${name || "새 인물"} 인물 이미지`} loading="lazy" decoding="async" /> : <span>{mode === "card" ? <>CLICK OR DROP TO UPLOAD<br />{String(index + 1).padStart(3, "0")}</> : <>이미지를 클릭하거나<br />여기에 끌어다 놓기</>}</span>}
+    {imageDataUrl ? <img src={imageDataUrl} alt={altText ?? `${name || "새 인물"} 인물 이미지`} loading="lazy" decoding="async" /> : <span>{emptyText ?? (mode === "card" ? <>CLICK OR DROP TO UPLOAD<br />{String(index + 1).padStart(3, "0")}</> : <>이미지를 클릭하거나<br />여기에 끌어다 놓기</>)}</span>}
     <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { pick(event.target.files?.[0]); event.currentTarget.value = ""; }} disabled={busy} />
   </label>;
 }
 
-function ImageCropEditor({ file, onCancel, onApply }: { file: File; onCancel: () => void; onApply: (imageDataUrl: string) => void | Promise<void> }) {
+function ImageCropEditor({ file, onCancel, onApply, purpose = "인물" }: { file: File; onCancel: () => void; onApply: (imageDataUrl: string) => void | Promise<void>; purpose?: string }) {
   const size = 360;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
@@ -275,7 +287,7 @@ function ImageCropEditor({ file, onCancel, onApply }: { file: File; onCancel: ()
   }
 
   return <div className="modal-backdrop crop-backdrop" role="presentation">
-    <section className="modal crop-modal" role="dialog" aria-modal="true" aria-label="인물 이미지 편집">
+    <section className="modal crop-modal" role="dialog" aria-modal="true" aria-label={`${purpose} 이미지 편집`}>
       <p className="eyebrow">IMAGE EDITOR / CROP</p>
       <h2>이미지 위치와 크기 맞추기</h2>
       <div className="crop-stage"><canvas ref={canvasRef} width={size} height={size} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={() => { dragRef.current = null; }} onPointerCancel={() => { dragRef.current = null; }} aria-label="드래그해서 이미지 위치 이동" /></div>
@@ -296,15 +308,26 @@ function localOwnerKey() {
   return next;
 }
 
-function shortDate(value: string) {
-  if (!value) return "----.--.--";
-  return value.replace("T", " ").slice(0, 16);
-}
-
 function storyDateLabel(value: string) {
+  if (!value) return "날짜 불명";
   const [year, month, day] = value.split("-");
   if (year && (month === "00" || day === "00")) return `${year} / 날짜 불명`;
-  return value;
+  return value.replaceAll("-", "/");
+}
+
+const characterDetailFields = [
+  { key: "changedSince2011", label: "2011년과 비교해 가장 달라진 점" },
+  { key: "keepsake2011", label: "2011년에 얻은 물건이 있다면, 그 물건은 어떻게 했나요?" },
+  { key: "traumaImpact", label: "2011년에 얻은 광기와 공포증, 상처는 어떤 영향을 미쳤나요?" },
+  { key: "appearanceChange", label: "외모는 어떻게 바뀌었나요?" },
+  { key: "grades", label: "대학을 가려면 성적관리가 중요합니다. 잘 하고 있나요?" },
+  { key: "memorableEvent", label: "지난 4년 동안 가장 기억나는 일" },
+  { key: "fearOrHabit", label: "2011년 이후 생긴 두려움이나 습관" },
+] as const;
+
+function characterImageAlt(person: Character) {
+  const name = person.name.replace(/[,\s]*\(?\d+세\)?\s*$/, "");
+  return person.storyYear === 2015 ? `${name} 2015년 인물 이미지` : `${name} 인물 이미지`;
 }
 
 function recordCommentSectionId(id: string) {
@@ -358,6 +381,7 @@ export function MataepediaApp() {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [siteNotice, setSiteNotice] = useState<SiteNotice | null>(null);
+  const [siteMetaNotice, setSiteMetaNotice] = useState<SiteNotice | null>(null);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
 
@@ -371,6 +395,7 @@ export function MataepediaApp() {
       setEvents(data.timelineEvents ?? []);
       setCharacters(data.characters ?? []);
       setSiteNotice(data.siteNotice ?? null);
+      setSiteMetaNotice(data.siteMetaNotice ?? null);
       setNotice("");
     } catch {
       setNotice("자료를 불러오지 못했어. 잠시 뒤 다시 확인해 줘.");
@@ -424,7 +449,7 @@ export function MataepediaApp() {
         <main className="content" id="main-content" key={page}>
           {notice && <div className="notice-line">{notice}</div>}
           {loading ? <div className="terminal-loading">자료 불러오는 중<span>_</span></div> : null}
-          {!loading && page === "home" && <HomePage go={go} rooms={rooms} records={records} siteNotice={siteNotice} onSaved={refresh} />}
+          {!loading && page === "home" && <HomePage go={go} rooms={rooms} records={records} siteNotice={siteNotice} siteMetaNotice={siteMetaNotice} onSaved={refresh} />}
           {!loading && page === "timeline" && <TimelinePage events={events} onSaved={refresh} />}
           {!loading && page === "records" && <RecordsPage records={records} onSaved={refresh} />}
           {!loading && page === "people" && <PeoplePage characters={characters} onSaved={refresh} />}
@@ -435,21 +460,26 @@ export function MataepediaApp() {
       </div>
 
       <footer>
-        <span>MATAEPEDIA BUILD 0.2</span>
+        <span>MATAEPEDIA BUILD 0.3</span>
         <span>TEXT FIRST / LOW BANDWIDTH MODE</span>
       </footer>
     </div></ConfirmProvider>
   );
 }
 
-function HomePage({ go, rooms, records, siteNotice, onSaved }: { go: (page: PageKey) => void; rooms: Room[]; records: RecordItem[]; siteNotice: SiteNotice | null; onSaved: () => Promise<void> }) {
+function HomePage({ go, rooms, records, siteNotice, siteMetaNotice, onSaved }: { go: (page: PageKey) => void; rooms: Room[]; records: RecordItem[]; siteNotice: SiteNotice | null; siteMetaNotice: SiteNotice | null; onSaved: () => Promise<void> }) {
   const confirmDelete = useSiteConfirm();
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<RecordItem | null>(null);
   const [editingNotice, setEditingNotice] = useState(false);
   const [noticeError, setNoticeError] = useState("");
-  const guestbook = records.filter((item) => item.kind === "guestbook");
+  const guestbook = records
+    .filter((item) => item.kind === "guestbook")
+    .sort((left, right) => right.storyDate.localeCompare(left.storyDate) || right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
   const noticeBody = siteNotice?.body ?? "선생님들이랑 마을 사람들에게는 들키지 말자, 우리.";
+  const metaLead = "우리들은 이제 중학생 입니다.";
+  const metaBody = siteMetaNotice?.body ?? `${metaLead} 몇 년 전의 일에 대한 기억은 뚜렷하지 않습니다. 여러분의 주변 어른들이 은폐에 가담했기 때문이겠죠. 이상했던 장소들은, 기억과 대조할 수 없을 정도로 바뀌었습니다. 그때의 이야기를 해보려고 해도 어른들은 진실을 말해주지 않고, 우리는 제대로 들을 수 없었어요. 다만, 우리는 마태피아를 계속 적어왔기 때문에 우리들에게는 지난 일들이 잊혀지지 않았을 거예요. 지난 4년동안, 우리에게는 어떤 일이 생겼나요?`;
+  const metaRest = metaBody.startsWith(metaLead) ? metaBody.slice(metaLead.length).trimStart() : metaBody;
 
   async function submitNotice(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -516,6 +546,10 @@ function HomePage({ go, rooms, records, siteNotice, onSaved }: { go: (page: Page
           </form> : <p>{noticeBody}</p>}
         </div>
       </section>
+      <section className="meta-information" aria-labelledby="meta-information-title">
+        <h2 id="meta-information-title">우리만 아는 메타정보!</h2>
+        <p><strong>{metaLead}</strong>{metaRest && <> {metaRest}</>}</p>
+      </section>
       <section className="quick-grid">
         <button onClick={() => go("timeline")}><small>01 / HISTORY</small><strong>2011년 이후 연표 보기</strong><span>사건 기록 {"->"}</span></button>
         <button onClick={() => go("records")}><small>02 / RECORDS</small><strong>새 기록 남기기</strong><span>일기·메모 {"->"}</span></button>
@@ -562,7 +596,7 @@ function TimelinePage({ events, onSaved }: { events: TimelineEvent[]; onSaved: (
         storyYear: Number(form.get("year")),
         title: form.get("title"),
         body: form.get("body"),
-        authorName: form.get("author"),
+        authorName: "마태피아 기록반",
         ownerKey: localOwnerKey(),
       });
       formElement.reset();
@@ -591,7 +625,6 @@ function TimelinePage({ events, onSaved }: { events: TimelineEvent[]; onSaved: (
       {showForm && <form key={editing?.id ?? "new-event"} className="editor-box" onSubmit={submit}>
         <label>극중 연도<select name="year" defaultValue={editing?.storyYear ?? 2012}>{storyYears.map((year) => <option key={year}>{year}</option>)}</select></label>
         <label>사건 제목<input name="title" defaultValue={editing?.title ?? ""} maxLength={100} required /></label>
-        <label>기록한 사람<input name="author" defaultValue={editing?.authorName ?? ""} maxLength={24} required /></label>
         <label className="wide">사건 내용<textarea name="body" defaultValue={editing?.body ?? ""} maxLength={5000} required /></label>
         {error && <p className="form-error">{error}</p>}
         <div className="form-actions"><button type="button" onClick={() => { setShowForm(false); setEditing(null); }}>취소</button><button type="submit">{editing ? "수정 저장" : "저장"}</button></div>
@@ -601,9 +634,9 @@ function TimelinePage({ events, onSaved }: { events: TimelineEvent[]; onSaved: (
         {grouped.map((group) => <section key={group.year} className="year-block">
           <div className="year-marker"><strong>{group.year}</strong><span>{schoolYears[group.year]}</span></div>
           <div className="year-events">{group.events.length ? group.events.map((item) => <article key={item.id} className="timeline-entry">
-            <h2>{item.title}</h2><p>{item.body}</p><small>기록: {item.authorName}</small>
+            <h2>{item.title}</h2><p>{item.body}</p>
             <div className="entry-actions"><button onClick={() => openEditor(item)}>수정</button><button onClick={() => remove(item)}>삭제</button></div>
-            <CommentsSection sectionId={`timeline:${item.id}`} />
+            <CommentsSection sectionId={`timeline:${item.id}`} storyYear={item.storyYear} />
           </article>) : <p className="empty-year">— 아직 기록 없음 —</p>}</div>
         </section>)}
       </div>
@@ -617,14 +650,24 @@ function RecordsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () 
   const [selected, setSelected] = useState<RecordItem | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<RecordItem | null>(null);
+  const [draftImage, setDraftImage] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const visible = records.filter((item) => item.kind === filter);
 
   function openEditor(item?: RecordItem) {
     setEditing(item ?? null);
+    setDraftImage(item?.imageDataUrl ?? null);
     setSelected(null);
     setShowForm(true);
     setError("");
+  }
+
+  function chooseImage(file: File) {
+    if (!file.type.startsWith("image/")) { setError("이미지 파일만 올릴 수 있어."); return; }
+    if (file.size > 20 * 1024 * 1024) { setError("원본 이미지가 너무 커. 20MB보다 작은 파일을 골라 줘."); return; }
+    setError("");
+    setCropFile(file);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -632,10 +675,11 @@ function RecordsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () 
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     try {
-      await apiPost({ action: editing ? "update-record" : "create-record", id: editing?.id, kind: form.get("kind"), title: form.get("title"), body: form.get("body"), authorName: form.get("author"), storyDate: form.get("date"), ownerKey: localOwnerKey() });
+      await apiPost({ action: editing ? "update-record" : "create-record", id: editing?.id, kind: form.get("kind"), title: form.get("title"), body: form.get("body"), authorName: form.get("author"), storyDate: form.get("date"), category: form.get("category"), imageDataUrl: draftImage, ownerKey: localOwnerKey() });
       formElement.reset();
       setShowForm(false);
       setEditing(null);
+      setDraftImage(null);
       await onSaved();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "저장하지 못했습니다."); }
   }
@@ -663,20 +707,25 @@ function RecordsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () 
         <label>분류<select name="kind" defaultValue={editing?.kind ?? filter}><option value="diary">일기</option><option value="memo">메모</option></select></label>
         <label>극중 날짜<input name="date" inputMode="numeric" placeholder="2011-00-00" pattern="20(11|12|13|14|15)-(0[0-9]|1[0-2])-(0[0-9]|[12][0-9]|3[01])" defaultValue={editing?.storyDate ?? "2012-01-01"} maxLength={10} required /></label>
         <label>작성자<input name="author" defaultValue={editing?.authorName ?? ""} maxLength={24} required /></label>
+        <label>세부 분류<input name="category" defaultValue={editing?.category ?? ""} maxLength={40} placeholder="선택 입력" /></label>
         <label className="wide">제목<input name="title" defaultValue={editing?.title ?? ""} maxLength={100} required /></label>
         <label className="wide">내용<textarea name="body" defaultValue={editing?.body ?? ""} maxLength={10000} required /></label>
+        <div className="record-image-editor wide"><span>기록 이미지</span><ImageUploadField imageDataUrl={draftImage} name={editing?.title ?? "새 기록"} index={0} onFile={chooseImage} mode="form" altText={`${editing?.title ?? "새 기록"} 기록 이미지`} emptyText={<>이미지를 클릭하거나<br />여기에 끌어다 놓기</>} />{draftImage && <button className="text-button" type="button" onClick={() => setDraftImage(null)}>[ 첨부 이미지 지우기 ]</button>}</div>
         {error && <p className="form-error">{error}</p>}
-        <div className="form-actions"><button type="button" onClick={() => { setShowForm(false); setEditing(null); }}>취소</button><button type="submit">{editing ? "수정 저장" : "기록 남기기"}</button></div>
+        <div className="form-actions"><button type="button" onClick={() => { setShowForm(false); setEditing(null); setDraftImage(null); }}>취소</button><button type="submit">{editing ? "수정 저장" : "기록 남기기"}</button></div>
       </form>}
       {!showForm && error && <p className="form-error standalone">{error}</p>}
       <div className={`record-card-grid ${filter === "memo" ? "memo-grid" : "diary-grid"}`} aria-label="우리 기록 목록">
         {visible.length ? visible.map((item) => <article className={`record-card ${item.kind}`} key={item.id}>
           <button className="record-card-open" onClick={() => setSelected(item)}>
-            <span>{storyDateLabel(item.storyDate)}</span><strong>{item.title}</strong><p>{item.body.slice(0, 150)}{item.body.length > 150 ? "…" : ""}</p><small>{item.authorName}</small>
+            <span>{storyDateLabel(item.storyDate)}{item.category ? ` / ${item.category}` : ""}</span><strong>{item.title}</strong>
+            {item.imageDataUrl ? <img className="record-card-image" src={item.imageDataUrl} alt={`${item.title} 기록 이미지`} loading="lazy" decoding="async" /> : item.id === "official-record-2013-two-drawings" ? <span className="record-image-placeholder">기록 이미지 준비 중</span> : null}
+            <p>{item.body.slice(0, 150)}{item.body.length > 150 ? "…" : ""}</p><small>{item.authorName}</small>
           </button>
           <div className="record-card-actions"><button onClick={() => openEditor(item)}>[ 수정 ]</button><button onClick={() => remove(item)}>[ 삭제 ]</button></div>
         </article>) : <p className="empty table-empty">이 분류에는 아직 기록이 없어.</p>}
       </div>
+      {cropFile && <ImageCropEditor file={cropFile} purpose="기록" onCancel={() => setCropFile(null)} onApply={(imageDataUrl) => { setDraftImage(imageDataUrl); setCropFile(null); }} />}
     </>
   );
 }
@@ -684,14 +733,15 @@ function RecordsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () 
 function RecordDocument({ record, onBack, onEdit, onDelete, error }: { record: RecordItem; onBack: () => void; onEdit: () => void; onDelete: () => void; error: string }) {
   return <>
     <div className="document-actions"><button className="back-link" onClick={onBack}>{"<-"} 기록 목록</button><div><button className="text-button" onClick={onEdit}>[ 기록 수정 ]</button><button className="text-button" onClick={onDelete}>[ 기록 삭제 ]</button></div></div>
-    <SectionTitle eyebrow={`RECORD / ${kindLabels[record.kind]}`} title={record.title} description={`${storyDateLabel(record.storyDate)} / ${record.authorName}`} />
+    <SectionTitle eyebrow={`RECORD / ${kindLabels[record.kind]}`} title={record.title} description={`${storyDateLabel(record.storyDate)}${record.category ? ` / ${record.category}` : ""} / ${record.authorName}`} />
+    {record.imageDataUrl ? <figure className="record-document-image"><img src={record.imageDataUrl} alt={`${record.title} 기록 이미지`} loading="lazy" decoding="async" /></figure> : record.id === "official-record-2013-two-drawings" ? <div className="record-image-placeholder document-placeholder">기록 이미지 준비 중</div> : null}
     <article className="document-body">{record.body.split("\n").map((line, index) => <p key={index}>{line || <>&nbsp;</>}</p>)}</article>
     {error && <p className="form-error standalone">{error}</p>}
-    <CommentsSection sectionId={`record:${record.id}`} initiallyOpen />
+    <CommentsSection sectionId={`record:${record.id}`} storyYear={Number(record.storyDate.slice(0, 4)) || 2011} initiallyOpen />
   </>;
 }
 
-function CommentsSection({ sectionId, initiallyOpen = false }: { sectionId: string; initiallyOpen?: boolean }) {
+function CommentsSection({ sectionId, storyYear = 2011, initiallyOpen = false }: { sectionId: string; storyYear?: number; initiallyOpen?: boolean }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [open, setOpen] = useState(initiallyOpen);
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -715,7 +765,7 @@ function CommentsSection({ sectionId, initiallyOpen = false }: { sectionId: stri
     const form = new FormData(formElement);
     setError("");
     try {
-      await apiPost({ action: "add-comment", sectionId, parentId: replyTo, authorName: form.get("author"), body: form.get("body"), ownerKey: localOwnerKey() });
+      await apiPost({ action: "add-comment", sectionId, parentId: replyTo, authorName: form.get("author"), body: form.get("body"), storyYear, ownerKey: localOwnerKey() });
       formElement.reset();
       setReplyTo(null);
       await load();
@@ -776,7 +826,7 @@ function CommentItem({ comment, onReply, onChanged, onError }: { comment: Commen
     <div><button type="button" onClick={() => setEditing(false)}>취소</button><button type="submit">수정 저장</button></div>
   </form>;
 
-  return <article className="comment"><header><strong>{comment.authorName}</strong><time>{shortDate(comment.createdAt)}{comment.updatedAt !== comment.createdAt ? " · 수정됨" : ""}</time></header><p>{comment.body}</p><div className="comment-actions"><button onClick={onReply}>답글</button><button onClick={() => setEditing(true)}>수정</button><button onClick={remove}>삭제</button></div></article>;
+  return <article className="comment"><header><strong>{comment.authorName}</strong><time>{comment.storyYear || 2011}년{comment.updatedAt !== comment.createdAt ? " · 수정됨" : ""}</time></header><p>{comment.body}</p><div className="comment-actions"><button onClick={onReply}>답글</button><button onClick={() => setEditing(true)}>수정</button><button onClick={remove}>삭제</button></div></article>;
 }
 
 function PeoplePage({ characters, onSaved }: { characters: Character[]; onSaved: () => Promise<void> }) {
@@ -799,7 +849,24 @@ function PeoplePage({ characters, onSaved }: { characters: Character[]; onSaved:
     const form = new FormData(formElement);
     const storyYear = Number(form.get("year")) as (typeof characterYears)[number];
     try {
-      await apiPost({ action: "save-character", id: `person-${crypto.randomUUID()}`, name: form.get("name"), summary: form.get("summary"), description: form.get("description"), storyYear, imageDataUrl: draftImage, sortOrder: characters.length, ownerKey: localOwnerKey() });
+      await apiPost({
+        action: "save-character",
+        id: `person-${crypto.randomUUID()}`,
+        name: form.get("name"),
+        summary: form.get("summary"),
+        description: form.get("description"),
+        storyYear,
+        imageDataUrl: draftImage,
+        sortOrder: characters.length,
+        changedSince2011: form.get("changedSince2011"),
+        keepsake2011: form.get("keepsake2011"),
+        traumaImpact: form.get("traumaImpact"),
+        appearanceChange: form.get("appearanceChange"),
+        grades: form.get("grades"),
+        memorableEvent: form.get("memorableEvent"),
+        fearOrHabit: form.get("fearOrHabit"),
+        ownerKey: localOwnerKey(),
+      });
       formElement.reset();
       setDraftImage(null);
       setShowAdd(false);
@@ -820,6 +887,7 @@ function PeoplePage({ characters, onSaved }: { characters: Character[]; onSaved:
       <label>극중 연도<select name="year" defaultValue={activeYear}>{characterYears.map((year) => <option key={year}>{year}</option>)}</select></label>
       <div className="character-image-field wide"><span>인물 이미지</span><ImageUploadField imageDataUrl={draftImage} name="새 인물" index={characters.length} onFile={chooseImage} mode="form" /><small>클릭하거나 드래그앤드롭한 뒤 확대·축소하고 크롭할 수 있어.</small></div>
       <label className="wide">인물 설명<textarea name="description" maxLength={6000} required /></label>
+      {activeYear === 2015 && <fieldset className="character-detail-editor wide"><legend>지난 4년 기록</legend>{characterDetailFields.map((field) => <label key={field.key}>{field.label}<textarea name={field.key} maxLength={1200} /></label>)}</fieldset>}
       {error && <p className="form-error">{error}</p>}
       <div className="form-actions"><button type="button" onClick={() => setShowAdd(false)}>취소</button><button type="submit">인물 추가</button></div>
     </form>}
@@ -848,8 +916,15 @@ function CharacterCard({ person, index, onSaved }: { person: Character; index: n
         summary: values.summary ?? person.summary,
         description: values.description ?? person.description,
         storyYear: values.storyYear ?? person.storyYear ?? 2011,
-        imageDataUrl: values.imageDataUrl ?? null,
+        imageDataUrl: values.imageDataUrl === undefined ? person.imageDataUrl ?? null : values.imageDataUrl,
         sortOrder: person.sortOrder ?? index,
+        changedSince2011: values.changedSince2011 ?? person.changedSince2011 ?? "",
+        keepsake2011: values.keepsake2011 ?? person.keepsake2011 ?? "",
+        traumaImpact: values.traumaImpact ?? person.traumaImpact ?? "",
+        appearanceChange: values.appearanceChange ?? person.appearanceChange ?? "",
+        grades: values.grades ?? person.grades ?? "",
+        memorableEvent: values.memorableEvent ?? person.memorableEvent ?? "",
+        fearOrHabit: values.fearOrHabit ?? person.fearOrHabit ?? "",
         ownerKey: localOwnerKey(),
       });
       await onSaved();
@@ -872,7 +947,19 @@ function CharacterCard({ person, index, onSaved }: { person: Character; index: n
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const saved = await save({ name: String(form.get("name") ?? ""), summary: String(form.get("summary") ?? ""), description: String(form.get("description") ?? ""), storyYear: Number(form.get("year")) });
+    const saved = await save({
+      name: String(form.get("name") ?? ""),
+      summary: String(form.get("summary") ?? ""),
+      description: String(form.get("description") ?? ""),
+      storyYear: Number(form.get("year")),
+      changedSince2011: String(form.get("changedSince2011") ?? ""),
+      keepsake2011: String(form.get("keepsake2011") ?? ""),
+      traumaImpact: String(form.get("traumaImpact") ?? ""),
+      appearanceChange: String(form.get("appearanceChange") ?? ""),
+      grades: String(form.get("grades") ?? ""),
+      memorableEvent: String(form.get("memorableEvent") ?? ""),
+      fearOrHabit: String(form.get("fearOrHabit") ?? ""),
+    });
     if (saved) setEditing(false);
   }
 
@@ -885,24 +972,24 @@ function CharacterCard({ person, index, onSaved }: { person: Character; index: n
   }
 
   return <article className="character-card">
-    <ImageUploadField imageDataUrl={person.imageDataUrl} name={person.name} index={index} onFile={chooseImage} busy={busy} />
+    <ImageUploadField imageDataUrl={person.imageDataUrl} name={person.name} index={index} onFile={chooseImage} busy={busy} altText={characterImageAlt(person)} emptyText={person.storyYear === 2015 ? <>IMAGE PENDING /<br />2015년 인물 이미지 준비 중</> : undefined} />
     <div className="character-content"><p className="eyebrow">PERSON FILE / {String(index + 1).padStart(3, "0")}</p>
-      {editing ? <form className="character-editor" onSubmit={submit}><label>이름<input name="name" defaultValue={person.name} maxLength={40} required /></label><label>한 마디<input name="summary" defaultValue={person.summary} maxLength={120} /></label><label>극중 연도<select name="year" defaultValue={person.storyYear ?? 2011}>{characterYears.map((year) => <option key={year}>{year}</option>)}</select></label><label>인물 설명<textarea name="description" defaultValue={person.description} maxLength={6000} /></label><div><button type="button" onClick={() => setEditing(false)}>취소</button><button type="submit" disabled={busy}>저장</button></div></form> : <><h2>{person.name}</h2><strong>{person.summary}</strong><p className="character-description">{person.description}</p><div className="entry-actions"><button onClick={() => setEditing(true)}>수정</button><button onClick={remove}>삭제</button></div></>}
+      {editing ? <form className="character-editor" onSubmit={submit}><label>이름<input name="name" defaultValue={person.name} maxLength={40} required /></label><label>한 마디<input name="summary" defaultValue={person.summary} maxLength={120} /></label><label>극중 연도<select name="year" defaultValue={person.storyYear ?? 2011}>{characterYears.map((year) => <option key={year}>{year}</option>)}</select></label><label>인물 설명<textarea name="description" defaultValue={person.description} maxLength={6000} /></label>{person.storyYear === 2015 && <fieldset className="character-detail-editor"><legend>지난 4년 기록</legend>{characterDetailFields.map((field) => <label key={field.key}>{field.label}<textarea name={field.key} defaultValue={person[field.key] ?? ""} maxLength={1200} /></label>)}</fieldset>}<div><button type="button" onClick={() => setEditing(false)}>취소</button><button type="submit" disabled={busy}>저장</button></div></form> : <><h2>{person.name}</h2><strong>{person.summary}</strong><p className="character-description">{person.description}</p>{person.storyYear === 2015 && <dl className="character-detail-list">{characterDetailFields.map((field) => <div key={field.key}><dt>{field.label}</dt><dd>{person[field.key] || <span>— 아직 비어 있음 —</span>}</dd></div>)}</dl>}<div className="entry-actions"><button onClick={() => setEditing(true)}>수정</button><button onClick={remove}>삭제</button></div></>}
       {error && <p className="form-error standalone">{error}</p>}
     </div>
-    <CommentsSection sectionId={`character-${person.id}`} />
+    <CommentsSection sectionId={`character-${person.id}`} storyYear={person.storyYear || 2011} />
     {cropFile && <ImageCropEditor file={cropFile} onCancel={() => setCropFile(null)} onApply={async (imageDataUrl) => { const saved = await save({ imageDataUrl }); if (saved) setCropFile(null); }} />}
   </article>;
 }
 
-function LegacyDocument({ sectionId, title, year, children }: { sectionId: string; title: string; year?: number; children: ReactNode }) {
-  return <article className="legacy-document"><div className="legacy-document-heading"><h2>{title}</h2>{year && <time>{year}</time>}</div><div className="legacy-document-body">{children}</div><CommentsSection sectionId={sectionId} /></article>;
+function LegacyDocument({ sectionId, title, year, status, children }: { sectionId: string; title: string; year?: number; status?: string; children: ReactNode }) {
+  return <article className="legacy-document"><div className="legacy-document-heading"><h2>{title}</h2>{year && <time>{year}</time>}</div>{status && <p className="legacy-document-status">{status}</p>}<div className="legacy-document-body">{children}</div><CommentsSection sectionId={sectionId} storyYear={year ?? 2011} /></article>;
 }
 
 function IslandPage() {
   return <>
     <SectionTitle eyebrow="MATAEPEDIA / MATAEDO" title="마태도" description="우리가 사는 섬. 지도에 없는 길이나 어른들이 모르는 장소도 기록한다." />
-    <LegacyDocument sectionId="world-map" title="마태도 지도"><img className="legacy-map" src="/legacy/mataedo_map.jpg" alt="마태도 지도" loading="lazy" decoding="async" /><p>사목리와 사목항, 학교, 공소, 괴불림과 마두산까지 표시해 둔 지도야.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-map" title="마태도 지도" year={2015}><div className="legacy-map-frame"><img className="legacy-map" src="/legacy/mataedo_map.jpg" alt="마태도 현재 지도" loading="lazy" decoding="async" /><span className="garden-map-label">마태<br />식물원</span></div><p>사목리와 사목항, 학교, 공소, 괴불림과 마두산까지 표시해 둔 지도야. 현재 지도에는 옛 순교성지 자리를 마태 식물원으로 표시했어.</p></LegacyDocument>
     <LegacyDocument sectionId="world-1" title="마태도 기본 정보"><p>마태도는 전라남도 완도군 보길도에서 남서쪽으로 약 20km 떨어진 섬이야. 행정구역상으로는 마태면 전체를 차지하고 있어.</p><p>면적은 약 38.47㎢, 인구는 약 4천여 명 정도야. 도서관, 체육관, 초중고 교육기관도 있고 말, 콩, 보리, 김, 해조류가 특산물이야.</p></LegacyDocument>
     <LegacyDocument sectionId="world-2" title="교통 정보"><p>해남에서는 바로 들어오는 배편이 없고, 완도선착장에서 사흘에 한 번 뜨는 배를 타야 해. 사목항까지 약 1시간 30분 걸려.</p><p>섬 안에는 택시나 렌트가 없고 한 시간에 한 번 정도 다니는 마을버스뿐이야.</p></LegacyDocument>
     <section className="wiki-section"><h2>마태도 일람</h2></section>
@@ -914,7 +1001,8 @@ function IslandPage() {
     <LegacyDocument sectionId="world-tourism" title="마태면 관광안내소"><p>사목항에서 내리면 바로 보이는 작은 1층 안내소야. 사목리 약도와 공소, 말총곶, 괴불림, 말 목장, 순교성지의 관광 자료를 구할 수 있어.</p><p>아르바이트생 현우성은 섬길과 관광지에 관해서는 잘 알려 주는 편이야. 마태도의 이상한 소문까지 전부 아는 사람은 아니야.</p></LegacyDocument>
     <LegacyDocument sectionId="world-creek" title="학교 아래 냇가"><p>학교에서 마을로 내려가는 길 옆에 있는 얕은 냇가야. 평소에는 아이들이 들여다보거나 건너 다니는 평범한 곳이야.</p><p>2011년 어느 날 물이 피처럼 붉게 변한 적이 있어. 왜 그랬는지는 누구도 제대로 설명하지 않았어.</p></LegacyDocument>
     <LegacyDocument sectionId="world-gwebullim" title="괴불림"><p>마을 바깥에서 마태오 순교성지 쪽으로 이어지는 숲이야. 길이 복잡하고 비가 오면 방향을 잃기 쉬워.</p><p>학교와 면사무소에서는 해가 진 뒤 들어가지 말라고 해. 특히 비 오는 밤에는 가까이 가지 않는 게 마태도의 오래된 규칙이야.</p></LegacyDocument>
-    <LegacyDocument sectionId="world-shrine" title="마태오 순교성지"><p>사목리에서 걸어서 약 20분, 괴불림 안쪽 언덕 너머에 있는 오래된 순교성지야. 한옥 여러 채로 이루어진 관광지지만 사목리에서 바로 이어지는 찻길은 없어.</p><p>마태도의 천주교 역사와 순교자들을 기리는 곳으로 알려져 있어. 낮에도 일부 구역은 들어가지 못하게 막는 때가 있어.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-shrine" title="마태오 순교성지" status="ARCHIVED / 2011년 기록 / 현재 철거됨"><p>사목리에서 걸어서 약 20분, 괴불림 안쪽 언덕 너머에 있는 오래된 순교성지야. 한옥 여러 채로 이루어진 관광지지만 사목리에서 바로 이어지는 찻길은 없어.</p><p>마태도의 천주교 역사와 순교자들을 기리는 곳으로 알려져 있어. 낮에도 일부 구역은 들어가지 못하게 막는 때가 있어.</p><p>이 문서는 철거되기 전에 적어둔 기록이야. 지금 같은 자리에는 마태 식물원이 들어서 있어.</p></LegacyDocument>
+    <LegacyDocument sectionId="world-botanical-garden" title="마태 식물원" year={2015} status="2014년 개장 / 옛 마태오 순교성지 부지"><p>2013년까지 마태오 순교성지가 있던 자리에 만들어진 식물원이야. 낡은 한옥과 담장은 모두 사라지고 꽃밭, 산책로, 벤치와 새 안내판이 생겼어. 어른들은 전보다 밝고 안전한 장소가 됐다고 말해. 오래된 우물은 배수시설이라는 설명과 함께 철제 덮개 아래 남아 있어.</p></LegacyDocument>
     <LegacyDocument sectionId="world-martyr-story" title="마태도에서 전하는 순교 이야기"><p>관광자료에는 마튜 샤르보노 신부가 1832년 마태도에 정착해 천주교를 전했고, 1842년에 열세 명과 함께 순교했다고 적혀 있어.</p><p>이건 섬과 순교성지가 공식적으로 소개하는 이야기야. 오래된 기록이 전부 남아 있는지는 확인하지 못했어.</p></LegacyDocument>
     <LegacyDocument sectionId="world-obang-cross" title="오방십자가"><p>보통 십자가보다 조금 크고, 다섯 가지 전통 오방색으로 칠한 십자가야. 마태도 신자들 중에는 이 십자가를 지니고 다니는 사람이 많아.</p><p>천주교 신앙과 섬의 오래된 민간신앙이 섞여 만들어진 마태도만의 물건이라고 알려져 있어.</p></LegacyDocument>
     <LegacyDocument sectionId="world-duiju" title="집집마다 있는 뒤주"><p>직사각형 나무 상자처럼 생긴 오래된 가구야. 마태도에서는 아직도 거의 모든 집에서 하나씩 볼 수 있어.</p><p>관광자료에는 1842년의 열세 순교자를 기리는 전통이라고 적혀 있어. 사람 한 명이 웅크리고 들어갈 만큼 큰 것도 있고, 낯선 표시가 새겨진 것도 있어.</p></LegacyDocument>
@@ -945,7 +1033,7 @@ function RumorsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () =
     const storyDate = editing ? `${year}${editing.storyDate.slice(4)}` : `${year}-01-01`;
     setError("");
     try {
-      await apiPost({ action: editing ? "update-record" : "create-record", id: editing?.id, kind: "rumor", title: form.get("title"), body: form.get("body"), authorName: form.get("author"), storyDate, ownerKey: localOwnerKey() });
+      await apiPost({ action: editing ? "update-record" : "create-record", id: editing?.id, kind: "rumor", title: form.get("title"), body: form.get("body"), authorName: form.get("author"), storyDate, category: form.get("category"), imageDataUrl: editing?.imageDataUrl ?? null, ownerKey: localOwnerKey() });
       formElement.reset();
       setShowForm(false);
       setEditing(null);
@@ -968,6 +1056,7 @@ function RumorsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () =
     <div className="toolbar"><button className="text-button" onClick={() => { if (showForm) { setShowForm(false); setEditing(null); } else { openEditor(); } }}>[ {showForm ? "닫기" : "+ 소문 남기기"} ]</button></div>
     {showForm && <form key={editing?.id ?? "new-rumor"} className="editor-box" onSubmit={submit}>
       <label>극중 연도<select name="year" defaultValue={editing?.storyDate.slice(0, 4) ?? "2011"}>{storyYears.map((year) => <option key={year}>{year}</option>)}</select></label>
+      <label>분류<select name="category" defaultValue={editing?.category ?? "학교 괴담"}><option>학교 괴담</option><option>학교 소문</option><option>마을 소문</option><option>기타</option></select></label>
       <label>작성자<input name="author" defaultValue={editing?.authorName ?? ""} maxLength={24} required /></label>
       <label className="wide">소문 제목<input name="title" defaultValue={editing?.title ?? ""} maxLength={100} required /></label>
       <label className="wide">소문 내용<textarea name="body" defaultValue={editing?.body ?? ""} maxLength={10000} required /></label>
@@ -975,7 +1064,7 @@ function RumorsPage({ records, onSaved }: { records: RecordItem[]; onSaved: () =
       <div className="form-actions"><button type="button" onClick={() => { setShowForm(false); setEditing(null); }}>취소</button><button type="submit">{editing ? "수정 저장" : "소문 남기기"}</button></div>
     </form>}
     {!showForm && error && <p className="form-error standalone">{error}</p>}
-    <section className="wiki-section"><h2>소문 목록</h2><div className="rumor-list">{records.length ? records.map((item) => <article key={item.id}><div><div className="rumor-heading"><h2>{item.title}</h2><time>{item.storyDate.slice(0, 4)}</time></div><p>{item.body}</p><small>{item.authorName}</small><div className="entry-actions"><button onClick={() => openEditor(item)}>수정</button><button onClick={() => remove(item)}>삭제</button></div><CommentsSection sectionId={recordCommentSectionId(item.id)} /></div></article>) : <div className="empty-box"><strong>등록된 소문 없음</strong><p>위의 ‘소문 남기기’에서 연도를 골라 적어 줘.</p></div>}</div></section>
+    <section className="wiki-section"><h2>소문 목록</h2><div className="rumor-list">{records.length ? records.map((item) => <article key={item.id}><div><div className="rumor-heading"><h2>{item.title}</h2><time>{item.storyDate.slice(0, 4)}</time></div><p className="rumor-category">분류: {item.category || "분류 미정"}</p><p>{item.body}</p><small>{item.authorName}</small><div className="entry-actions"><button onClick={() => openEditor(item)}>수정</button><button onClick={() => remove(item)}>삭제</button></div><CommentsSection sectionId={recordCommentSectionId(item.id)} storyYear={Number(item.storyDate.slice(0, 4)) || 2011} /></div></article>) : <div className="empty-box"><strong>등록된 소문 없음</strong><p>위의 ‘소문 남기기’에서 연도를 골라 적어 줘.</p></div>}</div></section>
   </>;
 }
 
@@ -998,7 +1087,8 @@ function ChatLobby({ rooms, onSelect, onSaved }: { rooms: Room[]; onSelect: (id:
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     try {
-      const result = await apiPost({ action: "create-room", title: form.get("title"), description: form.get("description"), creatorName: form.get("creator"), storyYear: Number(form.get("year")), ownerKey: localOwnerKey() });
+      const storyYear = Number(form.get("year"));
+      const result = await apiPost({ action: "create-room", title: form.get("title"), description: form.get("description"), creatorName: form.get("creator"), storyYear, storyDate: `${storyYear}-00-00`, ownerKey: localOwnerKey() });
       formElement.reset();
       setShowCreate(false);
       await onSaved();
@@ -1028,7 +1118,7 @@ function ChatLobby({ rooms, onSelect, onSaved }: { rooms: Room[]; onSelect: (id:
       const yearRooms = rooms.filter((room) => room.storyYear === year);
       return <section className="chat-year-section" key={year}>
         <header className="chat-year-heading"><strong>{year}년</strong><span>{schoolYears[year]}</span></header>
-        <div className="room-list">{yearRooms.length ? yearRooms.map((room, index) => <article key={room.id} className="room-row"><span className="room-number">ROOM {String(index + 1).padStart(2, "0")}</span><div><p className="room-year">[{room.storyYear}]</p><h2>{room.title}</h2><p>{room.description || "설명 없음"}</p><small>만든 사람: {room.creatorName} / 마지막 기록: {shortDate(room.lastMessageAt)}</small></div><div className="room-status"><strong>{room.onlineCount || 0}</strong><span>ONLINE</span><div><button onClick={() => onSelect(room.id)}>대화기록 보기</button><button onClick={() => remove(room)}>방 삭제</button></div></div></article>) : <div className="empty-box compact"><strong>— {year}년 방 없음 —</strong></div>}</div>
+        <div className="room-list">{yearRooms.length ? yearRooms.map((room, index) => <article key={room.id} className="room-row"><span className="room-number">ROOM {String(index + 1).padStart(2, "0")}</span><div><p className="room-year">[{room.storyYear}]</p><h2>{room.title}</h2><p>{room.description || "설명 없음"}</p><small>만든 사람: {room.creatorName} / 마지막 기록: {Number(room.messageCount || 0) > 0 ? storyDateLabel(room.storyDate || `${room.storyYear}-00-00`) : "아직 기록 없음"}</small></div><div className="room-status"><strong>{room.onlineCount || 0}</strong><span>ONLINE</span><div><button onClick={() => onSelect(room.id)}>대화기록 보기</button><button onClick={() => remove(room)}>방 삭제</button></div></div></article>) : <div className="empty-box compact"><strong>— {year}년 방 없음 —</strong></div>}</div>
       </section>;
     })}</div>
   </>;

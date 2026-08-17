@@ -21,6 +21,16 @@ function number(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : Number(value);
 }
 
+function validStoryDate(value: string, expectedYear?: number) {
+  const match = value.match(/^(201[1-5])([/-])(?:0[0-9]|1[0-2])\2(?:0[0-9]|[12][0-9]|3[01])$/);
+  return Boolean(match && (expectedYear === undefined || Number(match[1]) === expectedYear));
+}
+
+function validImageValue(value: string) {
+  return /^data:image\/(?:webp|jpeg|png);base64,/i.test(value)
+    || /^\/legacy\/characters\/(?:2015\/)?[a-z0-9-]+\.(?:png|jpe?g|webp)$/i.test(value);
+}
+
 function response(data: unknown, status = 200) {
   return Response.json(data, {
     status,
@@ -99,7 +109,8 @@ export async function GET(request: Request) {
       const rows = await db
         .prepare(
           `SELECT id, section_id AS sectionId, parent_id AS parentId,
-                  author_name AS authorName, body, created_at AS createdAt,
+                  author_name AS authorName, body, story_year AS storyYear,
+                  created_at AS createdAt,
                   updated_at AS updatedAt
            FROM comments
            WHERE section_id = ?1
@@ -111,11 +122,12 @@ export async function GET(request: Request) {
       return response({ comments: rows.results });
     }
 
-    const [rooms, records, events, characters, siteNotice] = await db.batch([
+    const [rooms, records, events, characters, siteNotice, siteMetaNotice] = await db.batch([
       db.prepare(
         `SELECT r.id, r.title, r.description, r.creator_name AS creatorName,
-                r.story_year AS storyYear, r.status, r.created_at AS createdAt,
-                r.last_message_at AS lastMessageAt,
+                r.story_year AS storyYear, r.story_date AS storyDate, r.status,
+                (SELECT COUNT(*) FROM chat_messages m
+                 WHERE m.room_id = r.id) AS messageCount,
                 (SELECT COUNT(*) FROM room_presence p
                  WHERE p.room_id = r.id
                    AND p.last_seen_at >= datetime('now', '-70 seconds')) AS onlineCount
@@ -125,7 +137,8 @@ export async function GET(request: Request) {
       ),
       db.prepare(
         `SELECT id, kind, title, body, author_name AS authorName,
-                story_date AS storyDate, created_at AS createdAt,
+                story_date AS storyDate, category, image_data_url AS imageDataUrl,
+                created_at AS createdAt,
                 updated_at AS updatedAt
          FROM records
          ORDER BY story_date DESC, created_at DESC
@@ -133,13 +146,21 @@ export async function GET(request: Request) {
       ),
       db.prepare(
         `SELECT id, story_year AS storyYear, title, body,
-                author_name AS authorName, created_at AS createdAt
+                author_name AS authorName, sort_order AS sortOrder,
+                created_at AS createdAt
          FROM timeline_events
-         ORDER BY story_year ASC, created_at ASC
+         ORDER BY story_year ASC, sort_order ASC, created_at ASC
          LIMIT 1000`,
       ),
       db.prepare(
         `SELECT id, name, summary, description, story_year AS storyYear, image_data_url AS imageDataUrl,
+                changed_since_2011 AS changedSince2011,
+                keepsake_2011 AS keepsake2011,
+                trauma_impact AS traumaImpact,
+                appearance_change AS appearanceChange,
+                grades AS grades,
+                memorable_event AS memorableEvent,
+                fear_or_habit AS fearOrHabit,
                 sort_order AS sortOrder, updated_at AS updatedAt
          FROM characters
          ORDER BY sort_order ASC, name ASC
@@ -153,6 +174,14 @@ export async function GET(request: Request) {
            LIMIT 1`,
         )
         .bind("home_notice"),
+      db
+        .prepare(
+          `SELECT value AS body, updated_at AS updatedAt
+           FROM site_settings
+           WHERE key = ?1
+           LIMIT 1`,
+        )
+        .bind("site_meta_notice"),
     ]);
 
     return response({
@@ -161,6 +190,7 @@ export async function GET(request: Request) {
       timelineEvents: events.results,
       characters: characters.results,
       siteNotice: siteNotice.results[0] ?? null,
+      siteMetaNotice: siteMetaNotice.results[0] ?? null,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "자료를 읽지 못했습니다.";
@@ -186,8 +216,9 @@ export async function POST(request: Request) {
       const description = text(payload.description, 240);
       const creatorName = text(payload.creatorName, 24);
       const storyYear = number(payload.storyYear);
+      const storyDate = text(payload.storyDate, 10) || `${storyYear}-00-00`;
       const ownerKey = text(payload.ownerKey, 200);
-      if (!title || !creatorName || !ownerKey || storyYear < 2011 || storyYear > 2015) {
+      if (!title || !creatorName || !ownerKey || storyYear < 2011 || storyYear > 2015 || !validStoryDate(storyDate, storyYear)) {
         return fail("방 이름, 만든 사람, 극중 연도를 확인해 주세요.");
       }
       const count = await db.prepare("SELECT COUNT(*) AS count FROM chat_rooms").first<{ count: number }>();
@@ -196,10 +227,10 @@ export async function POST(request: Request) {
       await db
         .prepare(
           `INSERT INTO chat_rooms
-           (id, title, description, creator_name, creator_key_hash, story_year)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+           (id, title, description, creator_name, creator_key_hash, story_year, story_date)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
         )
-        .bind(id, title, description, creatorName, await ownerHash(ownerKey), storyYear)
+        .bind(id, title, description, creatorName, await ownerHash(ownerKey), storyYear, storyDate)
         .run();
       return response({ id }, 201);
     }
@@ -369,9 +400,14 @@ export async function POST(request: Request) {
       const body = text(payload.body, 10_000);
       const authorName = text(payload.authorName, 24);
       const storyDate = text(payload.storyDate, 10);
+      const category = text(payload.category, 40);
+      const imageDataUrl = text(payload.imageDataUrl, 500_000) || null;
       const ownerKey = text(payload.ownerKey, 200);
-      if (!["diary", "memo", "guestbook", "rumor"].includes(kind) || !title || !body || !authorName || !storyDate || !ownerKey) {
+      if (!["diary", "memo", "guestbook", "rumor"].includes(kind) || !title || !body || !authorName || !validStoryDate(storyDate) || !ownerKey) {
         return fail("기록의 필수 내용을 모두 입력해 주세요.");
+      }
+      if (imageDataUrl && !/^data:image\/(?:webp|jpeg|png);base64,/i.test(imageDataUrl)) {
+        return fail("지원하지 않는 이미지 형식입니다.");
       }
       const count = await db.prepare("SELECT COUNT(*) AS count FROM records").first<{ count: number }>();
       if ((count?.count ?? 0) >= LIMITS.records) return fail("기록 보관 한도에 도달했습니다.", 409);
@@ -379,10 +415,10 @@ export async function POST(request: Request) {
       await db
         .prepare(
           `INSERT INTO records
-           (id, kind, title, body, author_name, story_date, owner_key_hash)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
+           (id, kind, title, body, author_name, story_date, owner_key_hash, category, image_data_url)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
         )
-        .bind(id, kind, title, body, authorName, storyDate, await ownerHash(ownerKey))
+        .bind(id, kind, title, body, authorName, storyDate, await ownerHash(ownerKey), category, imageDataUrl)
         .run();
       return response({ id }, 201);
     }
@@ -394,8 +430,14 @@ export async function POST(request: Request) {
       const body = text(payload.body, 10_000);
       const authorName = text(payload.authorName, 24);
       const storyDate = text(payload.storyDate, 10);
-      if (!id || !["diary", "memo", "guestbook", "rumor"].includes(kind) || !title || !body || !authorName || !storyDate) {
+      const category = text(payload.category, 40);
+      const hasImageUpdate = Object.prototype.hasOwnProperty.call(payload, "imageDataUrl");
+      const imageDataUrl = text(payload.imageDataUrl, 500_000) || null;
+      if (!id || !["diary", "memo", "guestbook", "rumor"].includes(kind) || !title || !body || !authorName || !validStoryDate(storyDate)) {
         return fail("수정할 기록의 내용을 모두 입력해 주세요.");
+      }
+      if (imageDataUrl && !/^data:image\/(?:webp|jpeg|png);base64,/i.test(imageDataUrl)) {
+        return fail("지원하지 않는 이미지 형식입니다.");
       }
       const record = await db
         .prepare("SELECT id FROM records WHERE id = ?1")
@@ -406,10 +448,12 @@ export async function POST(request: Request) {
         .prepare(
           `UPDATE records
            SET kind = ?2, title = ?3, body = ?4, author_name = ?5,
-               story_date = ?6, updated_at = CURRENT_TIMESTAMP
+               story_date = ?6, category = ?7,
+               image_data_url = CASE WHEN ?8 = 1 THEN ?9 ELSE image_data_url END,
+               updated_at = CURRENT_TIMESTAMP
            WHERE id = ?1`,
         )
-        .bind(id, kind, title, body, authorName, storyDate)
+        .bind(id, kind, title, body, authorName, storyDate, category, hasImageUpdate ? 1 : 0, imageDataUrl)
         .run();
       return response({ ok: true });
     }
@@ -434,8 +478,11 @@ export async function POST(request: Request) {
       const parentId = text(payload.parentId, 80) || null;
       const authorName = text(payload.authorName, 24);
       const body = text(payload.body, 2_000);
+      const storyYear = number(payload.storyYear) || 2015;
       const ownerKey = text(payload.ownerKey, 200);
-      if (!sectionId || !authorName || !body || !ownerKey) return fail("댓글 내용을 확인해 주세요.");
+      if (!sectionId || !authorName || !body || !ownerKey || storyYear < 2011 || storyYear > 2015) {
+        return fail("댓글 내용을 확인해 주세요.");
+      }
       const count = await db
         .prepare("SELECT COUNT(*) AS count FROM comments WHERE section_id = ?1")
         .bind(sectionId)
@@ -445,10 +492,10 @@ export async function POST(request: Request) {
       await db
         .prepare(
           `INSERT INTO comments
-           (id, section_id, parent_id, author_name, body, owner_key_hash)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+           (id, section_id, parent_id, author_name, body, owner_key_hash, story_year)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
         )
-        .bind(id, sectionId, parentId, authorName, body, await ownerHash(ownerKey))
+        .bind(id, sectionId, parentId, authorName, body, await ownerHash(ownerKey), storyYear)
         .run();
       return response({ id }, 201);
     }
@@ -457,8 +504,12 @@ export async function POST(request: Request) {
       const id = text(payload.id, 80);
       const authorName = text(payload.authorName, 24);
       const body = text(payload.body, 2_000);
+      const suppliedStoryYear = payload.storyYear == null ? null : number(payload.storyYear);
       const ownerKey = text(payload.ownerKey, 200);
       if (!id || !authorName || !body || !ownerKey) return fail("수정할 댓글 내용을 확인해 주세요.");
+      if (suppliedStoryYear !== null && (suppliedStoryYear < 2011 || suppliedStoryYear > 2015)) {
+        return fail("댓글 연도를 확인해 주세요.");
+      }
       const comment = await db
         .prepare("SELECT owner_key_hash AS ownerKeyHash FROM comments WHERE id = ?1")
         .bind(id)
@@ -468,10 +519,12 @@ export async function POST(request: Request) {
       await db
         .prepare(
           `UPDATE comments
-           SET author_name = ?2, body = ?3, updated_at = CURRENT_TIMESTAMP
+           SET author_name = ?2, body = ?3,
+               story_year = COALESCE(?4, story_year),
+               updated_at = CURRENT_TIMESTAMP
            WHERE id = ?1`,
         )
-        .bind(id, authorName, body)
+        .bind(id, authorName, body, suppliedStoryYear)
         .run();
       return response({ ok: true });
     }
@@ -505,21 +558,26 @@ export async function POST(request: Request) {
       const storyYear = number(payload.storyYear);
       const title = text(payload.title, 100);
       const body = text(payload.body, 5_000);
-      const authorName = text(payload.authorName, 24);
+      const authorName = text(payload.authorName, 24) || "마태피아 기록반";
       const ownerKey = text(payload.ownerKey, 200);
-      if (storyYear < 2011 || storyYear > 2015 || !title || !body || !authorName || !ownerKey) {
+      if (storyYear < 2011 || storyYear > 2015 || !title || !body || !ownerKey) {
         return fail("사건의 필수 내용을 확인해 주세요.");
       }
       const count = await db.prepare("SELECT COUNT(*) AS count FROM timeline_events").first<{ count: number }>();
       if ((count?.count ?? 0) >= LIMITS.events) return fail("연표 보관 한도에 도달했습니다.", 409);
       const id = crypto.randomUUID();
+      const lastOrder = await db
+        .prepare("SELECT COALESCE(MAX(sort_order), 0) AS sortOrder FROM timeline_events WHERE story_year = ?1")
+        .bind(storyYear)
+        .first<{ sortOrder: number }>();
+      const sortOrder = Number(lastOrder?.sortOrder ?? 0) + 10;
       await db
         .prepare(
           `INSERT INTO timeline_events
-           (id, story_year, title, body, author_name, owner_key_hash)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+           (id, story_year, title, body, author_name, owner_key_hash, sort_order)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
         )
-        .bind(id, storyYear, title, body, authorName, await ownerHash(ownerKey))
+        .bind(id, storyYear, title, body, authorName, await ownerHash(ownerKey), sortOrder)
         .run();
       return response({ id }, 201);
     }
@@ -529,22 +587,36 @@ export async function POST(request: Request) {
       const storyYear = number(payload.storyYear);
       const title = text(payload.title, 100);
       const body = text(payload.body, 5_000);
-      const authorName = text(payload.authorName, 24);
-      if (!id || storyYear < 2011 || storyYear > 2015 || !title || !body || !authorName) {
+      const suppliedAuthorName = text(payload.authorName, 24);
+      if (!id || storyYear < 2011 || storyYear > 2015 || !title || !body) {
         return fail("사건의 필수 내용을 확인해 주세요.");
       }
       const event = await db
-        .prepare("SELECT id FROM timeline_events WHERE id = ?1")
+        .prepare(
+          `SELECT id, story_year AS storyYear, author_name AS authorName,
+                  sort_order AS sortOrder
+           FROM timeline_events WHERE id = ?1`,
+        )
         .bind(id)
-        .first<{ id: string }>();
+        .first<{ id: string; storyYear: number; authorName: string; sortOrder: number }>();
       if (!event) return fail("존재하지 않는 사건입니다.", 404);
+      let sortOrder = event.sortOrder;
+      if (event.storyYear !== storyYear) {
+        const lastOrder = await db
+          .prepare("SELECT COALESCE(MAX(sort_order), 0) AS sortOrder FROM timeline_events WHERE story_year = ?1")
+          .bind(storyYear)
+          .first<{ sortOrder: number }>();
+        sortOrder = Number(lastOrder?.sortOrder ?? 0) + 10;
+      }
+      const authorName = suppliedAuthorName || event.authorName || "마태피아 기록반";
       await db
         .prepare(
           `UPDATE timeline_events
-           SET story_year = ?2, title = ?3, body = ?4, author_name = ?5
+           SET story_year = ?2, title = ?3, body = ?4, author_name = ?5,
+               sort_order = ?6
            WHERE id = ?1`,
         )
-        .bind(id, storyYear, title, body, authorName)
+        .bind(id, storyYear, title, body, authorName, sortOrder)
         .run();
       return response({ ok: true });
     }
@@ -571,11 +643,18 @@ export async function POST(request: Request) {
       const description = text(payload.description, 6_000);
       const storyYear = number(payload.storyYear) || 2011;
       const imageDataUrl = text(payload.imageDataUrl, 250_000) || null;
+      const changedSince2011 = text(payload.changedSince2011, 2_000);
+      const keepsake2011 = text(payload.keepsake2011, 2_000);
+      const traumaImpact = text(payload.traumaImpact, 2_000);
+      const appearanceChange = text(payload.appearanceChange, 2_000);
+      const grades = text(payload.grades, 2_000);
+      const memorableEvent = text(payload.memorableEvent, 2_000);
+      const fearOrHabit = text(payload.fearOrHabit, 2_000);
       const sortOrder = Math.max(0, Math.min(999, number(payload.sortOrder) || 0));
       const ownerKey = text(payload.ownerKey, 200);
       if (!id || !name || !ownerKey) return fail("인물 문서 정보를 확인해 주세요.");
       if (![2011, 2015].includes(storyYear)) return fail("인물 연도는 2011년이나 2015년으로 골라 주세요.");
-      if (imageDataUrl && !/^data:image\/(?:webp|jpeg|png);base64,/i.test(imageDataUrl)) {
+      if (imageDataUrl && !validImageValue(imageDataUrl)) {
         return fail("지원하지 않는 이미지 형식입니다.");
       }
 
@@ -588,19 +667,44 @@ export async function POST(request: Request) {
       await db
         .prepare(
           `INSERT INTO characters
-           (id, name, summary, description, story_year, image_data_url, owner_key_hash, sort_order)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+           (id, name, summary, description, story_year, image_data_url,
+            changed_since_2011, keepsake_2011, trauma_impact, appearance_change,
+            grades, memorable_event, fear_or_habit, owner_key_hash, sort_order)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
            ON CONFLICT(id) DO UPDATE SET
              name = excluded.name,
              summary = excluded.summary,
              description = excluded.description,
              story_year = excluded.story_year,
              image_data_url = COALESCE(excluded.image_data_url, characters.image_data_url),
+             changed_since_2011 = excluded.changed_since_2011,
+             keepsake_2011 = excluded.keepsake_2011,
+             trauma_impact = excluded.trauma_impact,
+             appearance_change = excluded.appearance_change,
+             grades = excluded.grades,
+             memorable_event = excluded.memorable_event,
+             fear_or_habit = excluded.fear_or_habit,
              owner_key_hash = excluded.owner_key_hash,
              sort_order = excluded.sort_order,
              updated_at = CURRENT_TIMESTAMP`,
         )
-        .bind(id, name, summary, description, storyYear, imageDataUrl, await ownerHash(ownerKey), sortOrder)
+        .bind(
+          id,
+          name,
+          summary,
+          description,
+          storyYear,
+          imageDataUrl,
+          changedSince2011,
+          keepsake2011,
+          traumaImpact,
+          appearanceChange,
+          grades,
+          memorableEvent,
+          fearOrHabit,
+          await ownerHash(ownerKey),
+          sortOrder,
+        )
         .run();
       return response({ id });
     }

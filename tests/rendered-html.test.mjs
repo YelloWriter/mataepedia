@@ -28,11 +28,12 @@ test("server-renders the Mataepedia shell and social metadata", async () => {
 });
 
 test("keeps the public data features, editing controls, and free-tier guardrails in source", async () => {
-  const [page, app, api, css, hosting, packageJson, legacyMigration, cleanupMigration, characterYearMigration, aftermathMigration, islandYearsMigration, editableRumorsMigration, noticeMigration, migrationJournal] = await Promise.all([
+  const [page, app, api, css, schema, hosting, packageJson, legacyMigration, cleanupMigration, characterYearMigration, aftermathMigration, islandYearsMigration, editableRumorsMigration, noticeMigration, build03Migration, commentYearMigration, characterImagesMigration, migrationJournal] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/mataepedia-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/community/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0002_legacy_netlify_data.sql", import.meta.url), "utf8"),
@@ -42,6 +43,9 @@ test("keeps the public data features, editing controls, and free-tier guardrails
     readFile(new URL("../drizzle/0006_island_years.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0007_editable_rumors.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0008_bumpy_famine.sql", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0009_polite_omega_sentinel.sql", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0010_brief_quentin_quire.sql", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0011_2015_character_images.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8"),
   ]);
 
@@ -82,6 +86,22 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(app, /leave\(false, false\)/);
   assert.match(app, /storyDateLabel/);
   assert.match(app, /날짜 불명/);
+  assert.match(app, /MATAEPEDIA BUILD 0\.3/);
+  assert.match(app, /우리만 아는 메타정보!/);
+  assert.match(app, /<strong>\{metaLead\}<\/strong>/);
+  assert.match(app, /right\.storyDate\.localeCompare\(left\.storyDate\)/);
+  assert.match(app, /기록 이미지 준비 중/);
+  assert.match(app, /IMAGE PENDING \/<br \/>2015년 인물 이미지 준비 중/);
+  assert.match(app, /2011년과 비교해 가장 달라진 점/);
+  assert.match(app, /2011년에 얻은 물건이 있다면, 그 물건은 어떻게 했나요\?/);
+  assert.match(app, /광기와 공포증, 상처는 어떤 영향을 미쳤나요\?/);
+  assert.match(app, /대학을 가려면 성적관리가 중요합니다\. 잘 하고 있나요\?/);
+  assert.match(app, /마태 식물원/);
+  assert.match(app, /ARCHIVED \/ 2011년 기록 \/ 현재 철거됨/);
+  assert.match(app, /아직 기록 없음/);
+  assert.match(app, /comment\.storyYear \|\| 2011/);
+  assert.doesNotMatch(app, /기록한 사람/);
+  assert.doesNotMatch(app, /shortDate\(/);
   assert.match(app, /마태도 일람/);
   assert.match(app, /사목리와 사목항/);
   assert.match(app, /마태 초중고등학교/);
@@ -130,6 +150,15 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.doesNotMatch(api, /id\.startsWith\("official-event-"\)/);
   assert.doesNotMatch(api, /이 브라우저에서 쓴 기록만/);
   assert.doesNotMatch(api, /이 브라우저에서 만든 사건만/);
+  assert.match(api, /story_date AS storyDate/);
+  assert.match(api, /messageCount/);
+  assert.match(api, /image_data_url AS imageDataUrl/);
+  assert.match(api, /story_year AS storyYear/);
+  assert.match(api, /sort_order AS sortOrder/);
+  assert.match(api, /site_meta_notice/);
+  assert.match(api, /validImageValue/);
+  assert.match(api, /legacy\\\/characters/);
+  assert.doesNotMatch(api, /r\.last_message_at AS lastMessageAt/);
   assert.match(css, /Pretendard Variable/);
   assert.match(css, /body, body \* \{[^}]*font-family:[^}]*!important/);
   assert.match(css, /body \.wordmark span \{[^}]*font-family: "Courier New", monospace !important/);
@@ -141,6 +170,14 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(css, /\.comment-form[^}]*grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(css, /\.character-year-tabs/);
   assert.match(css, /\.guestbook-actions/);
+  assert.match(css, /\.meta-information/);
+  assert.match(css, /\.record-image-placeholder/);
+  assert.match(css, /\.character-detail-list/);
+  assert.match(css, /\.legacy-document-status/);
+  assert.match(css, /overflow-wrap: anywhere/);
+  assert.match(schema, /storyDate: text\("story_date"\)/);
+  assert.match(schema, /storyYear: integer\("story_year"\)\.notNull\(\)\.default\(2011\)/);
+  assert.match(schema, /changedSince2011: text\("changed_since_2011"\)/);
   assert.equal((legacyMigration.match(/INSERT OR IGNORE INTO comments/g) ?? []).length, 64);
   assert.equal((legacyMigration.match(/INSERT OR IGNORE INTO characters/g) ?? []).length, 11);
   assert.match(cleanupMigration, /title = '테스트할게\.'/);
@@ -171,6 +208,39 @@ test("keeps the public data features, editing controls, and free-tier guardrails
   assert.match(migrationJournal, /0008_bumpy_famine/);
   assert.match(editableRumorsMigration, /마을 외곽의 이상한 소문/);
   assert.match(migrationJournal, /0007_editable_rumors/);
+  assert.match(build03Migration, /마태오 순교성지 잠정 폐쇄/);
+  assert.match(build03Migration, /성지로 가는 길이 완전히 막힘/);
+  assert.match(build03Migration, /순교성지 철거와 마태 식물원 공사/);
+  assert.match(build03Migration, /마태 식물원 개장/);
+  assert.match(build03Migration, /윤향자 선생님의 휴직/);
+  assert.match(build03Migration, /장학관 방문 때문에 대청소/);
+  assert.match(build03Migration, /육지에서 온 사진/);
+  assert.match(build03Migration, /돌고래가 돌아간 길/);
+  assert.match(build03Migration, /태풍날의 임시 공연/);
+  assert.match(build03Migration, /같은 장소, 다른 그림/);
+  assert.match(build03Migration, /따로 보관하기 시작한 기록/);
+  assert.match(build03Migration, /밤의 피리 소리/);
+  assert.match(build03Migration, /열리지 않는 옥상문/);
+  assert.match(build03Migration, /자꾸 사라지는 화분/);
+  assert.match(build03Migration, /윤향자 선생님 휴직/);
+  assert.match(build03Migration, /official-character-2015-han-yeoul/);
+  assert.match(build03Migration, /official-character-2015-caretaker/);
+  assert.match(build03Migration, /official-room-2015-cleaning/);
+  assert.match(build03Migration, /official-guestbook-2015-junseok/);
+  assert.match(build03Migration, /site_meta_notice/);
+  assert.doesNotMatch(build03Migration, /site_meta_notice_(?:title|body)/);
+  assert.match(build03Migration, /898b68ce-fba7-4a77-875e-e6e954dfe10f/);
+  assert.match(commentYearMigration, /ALTER TABLE `comments` ADD `story_year`/);
+  assert.match(commentYearMigration, /UPDATE `comments` SET `story_year` = 2011/);
+  assert.match(migrationJournal, /0009_polite_omega_sentinel/);
+  assert.match(migrationJournal, /0010_brief_quentin_quire/);
+  assert.match(characterImagesMigration, /official-character-2015-seon-yuna/);
+  assert.match(characterImagesMigration, /legacy\/characters\/2015\/park-gyuntae\.png/);
+  assert.match(characterImagesMigration, /legacy\/characters\/2015\/yeon-daeheum\.png/);
+  assert.match(characterImagesMigration, /legacy\/characters\/2015\/lee-hyeonji\.png/);
+  assert.match(characterImagesMigration, /legacy\/characters\/2015\/caretaker\.png/);
+  assert.match(characterImagesMigration, /legacy\/characters\/2015\/seon-yuna\.png/);
+  assert.match(migrationJournal, /0011_2015_character_images/);
   assert.match(hosting, /"d1": "DB"/);
   assert.match(hosting, /"r2": null/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);

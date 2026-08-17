@@ -64,6 +64,27 @@
       "when": 1786693540441,
       "tag": "0008_bumpy_famine",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1786936773350,
+      "tag": "0009_polite_omega_sentinel",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1786936935373,
+      "tag": "0010_brief_quentin_quire",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1786939200000,
+      "tag": "0011_2015_character_images",
+      "breakpoints": true
     }
   ]
 }
